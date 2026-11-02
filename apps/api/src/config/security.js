@@ -12,11 +12,17 @@ export const DEFAULT_SECURITY_CONFIG = Object.freeze({
   refreshReuseGraceSeconds: 10,
   maxFailedLogins: 5,
   lockoutSeconds: 15 * 60,
+  emailVerificationTtlSeconds: 24 * 60 * 60,
+  passwordResetTtlSeconds: 60 * 60,
+  /** At most one verification/reset email per account per minute (anti email-bombing). */
+  emailCooldownSeconds: 60,
   rateLimits: {
     global: { windowSeconds: 60, limit: 300 },
     login: { windowSeconds: 15 * 60, limit: 10 },
     register: { windowSeconds: 60 * 60, limit: 5 },
     refresh: { windowSeconds: 15 * 60, limit: 60 },
+    emailRequest: { windowSeconds: 60 * 60, limit: 5 },
+    tokenSubmit: { windowSeconds: 15 * 60, limit: 20 },
   },
   cookies: {
     refreshToken: 'tigmi_rt',

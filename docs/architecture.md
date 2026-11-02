@@ -39,6 +39,7 @@ middleware/          authenticate (Bearer + live session check), validateBody (Z
 modules/<name>/      one folder per feature: <name>.routes.js, .controller.js, .service.js
 modules/auth/        + password.js (Argon2id), tokens.js (JWT, opaque tokens), cookies.js
 modules/audit/       audit.service.js: append-only audit log writer
+modules/mail/        mail.service.js (SMTP, sent off the request path), templates.js (fr/ar, RTL)
 modules/users/       users.serializer.js: the only public shape of a user
 utils/errors.js      AppError (status + stable code + optional headers) and helpers
 openapi.yaml         OpenAPI 3.1 description of every endpoint (kept in sync in each step)
@@ -70,27 +71,37 @@ returned in the `X-Request-Id` header and appears in server logs, so a user-repo
 
 ### Endpoints so far
 
-| Method | Path                    | Auth                                | Response                                                                      |
-| ------ | ----------------------- | ----------------------------------- | ----------------------------------------------------------------------------- |
-| GET    | `/api/v1/health`        | none                                | 200 `{status:"ok",database:"up"}` · 503 `{status:"degraded",database:"down"}` |
-| POST   | `/api/v1/auth/register` | none                                | 201 user + access token (+ cookies on web / refresh token on mobile)          |
-| POST   | `/api/v1/auth/login`    | none                                | 200 same as register                                                          |
-| POST   | `/api/v1/auth/refresh`  | cookie + CSRF header, or body token | 200 rotated tokens                                                            |
-| POST   | `/api/v1/auth/logout`   | Bearer                              | 204                                                                           |
-| GET    | `/api/v1/auth/me`       | Bearer                              | 200 user                                                                      |
+| Method | Path                               | Auth                                | Response                                                                                      |
+| ------ | ---------------------------------- | ----------------------------------- | --------------------------------------------------------------------------------------------- |
+| GET    | `/api/v1/health`                   | none                                | 200 `{status:"ok",database:"up"}` · 503 `{status:"degraded",database:"down"}`                 |
+| POST   | `/api/v1/auth/register`            | none                                | 202 `check_email` (verification or "account exists" email)                                    |
+| POST   | `/api/v1/auth/verify-email`        | emailed token                       | 204                                                                                           |
+| POST   | `/api/v1/auth/resend-verification` | none                                | 202 `check_email`                                                                             |
+| POST   | `/api/v1/auth/forgot-password`     | none                                | 202 `check_email`                                                                             |
+| POST   | `/api/v1/auth/reset-password`      | emailed token                       | 204 (all sessions revoked)                                                                    |
+| POST   | `/api/v1/auth/login`               | none                                | 200 user + access token (+ cookies on web / refresh token on mobile); 403 if email unverified |
+| POST   | `/api/v1/auth/refresh`             | cookie + CSRF header, or body token | 200 rotated tokens                                                                            |
+| POST   | `/api/v1/auth/logout`              | Bearer                              | 204                                                                                           |
+| GET    | `/api/v1/auth/me`                  | Bearer                              | 200 user                                                                                      |
 
 Full contract: [`apps/api/openapi.yaml`](../apps/api/openapi.yaml).
 
 ### Authentication flow
 
 ```
-register/login ──► session row (1 per device, 30-day absolute expiry)
-               ──► access JWT (15 min, HS256, claims sub + sid)
-               ──► refresh token (random 256-bit; DB stores SHA-256)
+register ──► user (unverified) + email link /verify-email#token=… (token SHA-256 in user_tokens)
+verify-email ──► email verified ──► login allowed
+
+login ──► session row (1 per device, 30-day absolute expiry)
+      ──► access JWT (15 min, HS256, claims sub + sid)
+      ──► refresh token (random 256-bit; DB stores SHA-256)
                      web: HttpOnly cookie tigmi_rt (path /api/v1/auth) + readable tigmi_csrf
                      mobile (X-Client-Type: mobile): in the body → Expo SecureStore
 
 every request ──► Bearer JWT verified ──► session loaded: active? ──► req.auth
+
+forgot-password ──► email link /reset-password#token=… (1 h, single use)
+reset-password ──► new hash, email verified, lockout cleared, ALL sessions revoked
 
 refresh ──► token found & unused ──► mark used (compare-and-swap) + issue new one
         └─► token already used: <10 s ago → 409 retry · older → revoke whole session (theft)
@@ -106,9 +117,11 @@ refresh ──► token found & unused ──► mark used (compare-and-swap) + 
   natively and stably, or if Prisma 8 removes it.
 - Prisma 7 needs a **driver adapter** (`@prisma/adapter-pg` + `pg`); the connection URL lives in
   `prisma.config.js`, not in `schema.prisma`.
-- Migrations: `npm run db:migrate` (= `prisma migrate dev && prisma generate`; Prisma 7's
-  `migrate dev` no longer regenerates the client by itself — found the hard way in Phase 2).
-- Tables so far: `users`, `sessions`, `refresh_tokens`, `audit_logs` (snake_case names via `@map`).
+- Migrations: `npm run db:migrate -- --name <change>` runs `prisma migrate dev`, then the
+  `postdb:migrate` hook runs `prisma generate` (Prisma 7's `migrate dev` no longer regenerates the
+  client itself). Never chain extra commands inside `db:migrate`: npm appends `-- args` to the
+  last command, so `--name` would go to the wrong one (found the hard way in Phase 2).
+- Tables so far: `users`, `sessions`, `refresh_tokens`, `user_tokens`, `audit_logs` (snake_case names via `@map`).
 - Conventions: UUIDv7 primary keys (time-ordered, index-friendly), `timestamptz` columns, `Decimal(12,2)` for money (serialised as strings),
   `createdAt`/`updatedAt` on every table, explicit `onDelete` on every relation.
 

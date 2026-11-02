@@ -55,3 +55,17 @@ export const loginSchema = z
 export const refreshBodySchema = z
   .object({ refreshToken: z.string().min(20).max(200).optional() })
   .strict();
+
+/** Tokens from email links: 32 random bytes, base64url (43 chars). */
+export const emailTokenSchema = z
+  .string({ error: 'required' })
+  .regex(/^[\w-]{43}$/, { error: 'invalid_token' });
+
+export const verifyEmailSchema = z.object({ token: emailTokenSchema }).strict();
+
+/** Body of "resend verification" and "forgot password". */
+export const emailRequestSchema = z.object({ email: emailSchema }).strict();
+
+export const resetPasswordSchema = z
+  .object({ token: emailTokenSchema, password: passwordSchema })
+  .strict();

@@ -34,6 +34,7 @@ async function shutdown(signal) {
   const forceExit = setTimeout(() => process.exit(1), 10_000).unref();
   server.close(async () => {
     try {
+      await app.locals.mail.flush();
       await prisma.$disconnect();
     } finally {
       clearTimeout(forceExit);

@@ -12,6 +12,7 @@ import { createAuditService } from './modules/audit/audit.service.js';
 import { createAuthRouter } from './modules/auth/auth.routes.js';
 import { createAccessTokenSigner } from './modules/auth/tokens.js';
 import { createHealthRouter } from './modules/health/health.routes.js';
+import { createMailService, createSmtpTransport } from './modules/mail/mail.service.js';
 
 const REQUEST_ID_PATTERN = /^[\w-]{8,64}$/;
 
@@ -19,8 +20,9 @@ const REQUEST_ID_PATTERN = /^[\w-]{8,64}$/;
  * Builds the Express application. Dependencies are passed in (not imported globally)
  * so tests can create an app against the test database or a failing database, and
  * override security settings (e.g. tiny rate limits) through `security`.
+ * `mail` defaults to SMTP from env; tests pass a mail service with an in-memory transport.
  */
-export function createApp({ env, prisma, logger, security }) {
+export function createApp({ env, prisma, logger, security, mail }) {
   const config = createSecurityConfig(security);
   const app = express();
 
@@ -65,16 +67,38 @@ export function createApp({ env, prisma, logger, security }) {
   app.use(cookieParser());
 
   const audit = createAuditService({ prisma, logger });
+  const mailService =
+    mail ??
+    createMailService({
+      transport: createSmtpTransport(env),
+      from: env.MAIL_FROM,
+      appUrl: env.APP_URL,
+      logger,
+    });
   const accessTokens = createAccessTokenSigner({
     secret: env.JWT_ACCESS_SECRET,
     ttlSeconds: config.accessTokenTtlSeconds,
   });
   const authenticate = createAuthenticate({ prisma, accessTokens });
 
+  // Exposed for graceful shutdown (server.js waits for in-flight emails).
+  app.locals.mail = mailService;
+
   const v1 = express.Router();
   v1.use('/health', createHealthRouter({ prisma }));
   v1.use(createRateLimiter(config.rateLimits.global));
-  v1.use('/auth', createAuthRouter({ prisma, env, config, accessTokens, audit, authenticate }));
+  v1.use(
+    '/auth',
+    createAuthRouter({
+      prisma,
+      env,
+      config,
+      accessTokens,
+      audit,
+      authenticate,
+      mail: mailService,
+    }),
+  );
   app.use('/api/v1', v1);
 
   app.use(notFoundHandler);
