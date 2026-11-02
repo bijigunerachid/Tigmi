@@ -1,0 +1,40 @@
+@import 'tailwindcss';
+
+/* Brand tokens (full design system arrives in Phase 3). */
+@theme {
+  --color-navy: #0f172a;
+  --color-brand: #2563eb;
+  --color-accent: #22d3ee;
+  --color-canvas: #080d18;
+  --color-surface: #111827;
+  --color-ink: #f8fafc;
+  --color-ink-muted: #94a3b8;
+  --color-success: #34d399;
+  --color-warning: #fbbf24;
+  --color-danger: #f87171;
+}
+
+@layer base {
+  html {
+    color-scheme: dark;
+  }
+  body {
+    @apply min-h-dvh bg-canvas text-ink antialiased;
+    font-family:
+      system-ui,
+      -apple-system,
+      'Segoe UI',
+      Roboto,
+      sans-serif;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

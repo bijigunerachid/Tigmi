@@ -1,0 +1,46 @@
+{
+  "name": "tigmi",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Tigmi — bilingual (French/Arabic) family home management platform.",
+  "type": "module",
+  "engines": {
+    "node": ">=24.11.0 <25",
+    "npm": ">=11"
+  },
+  "workspaces": [
+    "apps/api",
+    "apps/web"
+  ],
+  "scripts": {
+    "dev": "concurrently --names api,web --prefix-colors cyan,magenta \"npm run dev -w @tigmi/api\" \"npm run dev -w @tigmi/web\"",
+    "services:up": "docker compose up -d --wait",
+    "services:down": "docker compose down",
+    "db:generate": "prisma generate",
+    "db:migrate": "prisma migrate dev",
+    "db:deploy": "prisma migrate deploy",
+    "db:status": "prisma migrate status",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test": "npm run test -w @tigmi/api && npm run test -w @tigmi/web",
+    "test:e2e": "playwright test",
+    "build": "npm run build -w @tigmi/web",
+    "audit": "npm audit --omit=dev --audit-level=moderate",
+    "check": "npm run lint && npm run format:check && npm run test && npm run build && npm run audit",
+    "postinstall": "prisma generate",
+    "audit:all": "npm audit"
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "4.14.0",
+    "@eslint/js": "10.0.1",
+    "@playwright/test": "1.64.1",
+    "concurrently": "10.0.6",
+    "eslint": "10.13.0",
+    "eslint-config-prettier": "10.1.8",
+    "eslint-plugin-react-hooks": "7.1.1",
+    "globals": "17.13.0",
+    "prettier": "3.9.10",
+    "prisma": "7.10.1"
+  }
+}
