@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Tigmi API
-  version: 0.3.0
+  version: 0.4.0
   description: |
     REST API for Tigmi. All paths are prefixed with `/api/v1`.
 
@@ -23,6 +23,10 @@ servers:
 tags:
   - name: System
   - name: Auth
+  - name: Households
+    description: |
+      Every household route checks, in the database, that the caller is a member and that their
+      role grants the required permission. Non-members get `404 HOUSEHOLD_NOT_FOUND`, never `403`.
 
 paths:
   /health:
@@ -234,11 +238,190 @@ paths:
                       user: { $ref: '#/components/schemas/User' }
         '401': { $ref: '#/components/responses/Unauthenticated' }
 
+  /households:
+    post:
+      tags: [Households]
+      summary: Create a household (the creator becomes OWNER)
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateHouseholdRequest' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/HouseholdResponse' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+    get:
+      tags: [Households]
+      summary: Households the current user belongs to
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: List (oldest membership first)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      households:
+                        type: array
+                        items: { $ref: '#/components/schemas/Household' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+
+  /households/{householdId}:
+    parameters: [{ $ref: '#/components/parameters/HouseholdId' }]
+    get:
+      tags: [Households]
+      summary: Household details (permission `household:read`)
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: The household with `myRole` and `permissions`
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/HouseholdResponse' }
+        '404': { $ref: '#/components/responses/HouseholdNotFound' }
+    patch:
+      tags: [Households]
+      summary: Update settings (permission `household:update` — OWNER)
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateHouseholdRequest' }
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/HouseholdResponse' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/HouseholdNotFound' }
+    delete:
+      tags: [Households]
+      summary: Delete the household and all its data (permission `household:delete` — OWNER)
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [confirmName]
+              properties:
+                confirmName: { type: string, description: Must equal the household name exactly }
+      responses:
+        '204': { description: Deleted (audit trail is kept) }
+        '400':
+          description: '`CONFIRMATION_MISMATCH` or `VALIDATION_ERROR`'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/HouseholdNotFound' }
+
+  /households/{householdId}/members:
+    parameters: [{ $ref: '#/components/parameters/HouseholdId' }]
+    get:
+      tags: [Households]
+      summary: Members, owners first (permission `members:read`)
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Members
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      members:
+                        type: array
+                        items: { $ref: '#/components/schemas/Member' }
+        '404': { $ref: '#/components/responses/HouseholdNotFound' }
+
+  /households/{householdId}/members/{memberId}:
+    parameters:
+      - { $ref: '#/components/parameters/HouseholdId' }
+      - name: memberId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    patch:
+      tags: [Households]
+      summary: Change a member's role
+      description: |
+        Permission `members:manage`. Owners may assign any role (several owners are allowed).
+        Others may only manage members ranked below them and only assign lower roles
+        (an ADMIN can manage MEMBERs but cannot create admins). The last OWNER cannot be demoted.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [role]
+              properties:
+                role: { type: string, enum: [OWNER, ADMIN, MEMBER] }
+      responses:
+        '200':
+          description: Updated member
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      member: { $ref: '#/components/schemas/Member' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404':
+          description: '`HOUSEHOLD_NOT_FOUND` or `MEMBER_NOT_FOUND`'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '409': { $ref: '#/components/responses/LastOwner' }
+    delete:
+      tags: [Households]
+      summary: Remove a member, or leave (when memberId is your own membership)
+      description: Leaving is open to every role; removing others follows the same hierarchy as role changes.
+      security: [{ bearerAuth: [] }]
+      responses:
+        '204': { description: Removed }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404':
+          description: '`HOUSEHOLD_NOT_FOUND` or `MEMBER_NOT_FOUND`'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '409': { $ref: '#/components/responses/LastOwner' }
+
 components:
   securitySchemes:
     bearerAuth: { type: http, scheme: bearer, bearerFormat: JWT }
 
   parameters:
+    HouseholdId:
+      name: householdId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
     ClientType:
       name: X-Client-Type
       in: header
@@ -247,6 +430,21 @@ components:
       schema: { type: string, enum: [mobile] }
 
   responses:
+    HouseholdNotFound:
+      description: '`HOUSEHOLD_NOT_FOUND` — also returned when you are not a member'
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Forbidden:
+      description: '`FORBIDDEN` — you are a member but your role does not allow this'
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    LastOwner:
+      description: '`LAST_OWNER` — a household must keep at least one owner'
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
     CheckEmail:
       description: Accepted. Identical whether or not an email was actually sent.
       content:
@@ -345,6 +543,62 @@ components:
             csrfToken: { type: string, description: Web clients only }
             refreshToken: { type: string, description: Mobile clients only }
             sessionExpiresAt: { type: string, format: date-time, description: Mobile clients only }
+
+    CreateHouseholdRequest:
+      type: object
+      additionalProperties: false
+      required: [name]
+      properties:
+        name: { type: string, minLength: 2, maxLength: 100 }
+        description: { type: [string, 'null'], maxLength: 500 }
+        currency: { type: string, pattern: '^[A-Z]{3}$', default: MAD, description: ISO 4217 }
+        timezone: { type: string, default: Africa/Casablanca, description: IANA time zone }
+
+    UpdateHouseholdRequest:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        name: { type: string, minLength: 2, maxLength: 100 }
+        description: { type: [string, 'null'], maxLength: 500, description: Empty string clears it }
+        currency: { type: string, pattern: '^[A-Z]{3}$' }
+        timezone: { type: string }
+
+    Household:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        description: { type: [string, 'null'] }
+        currency: { type: string }
+        timezone: { type: string }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        myRole: { type: string, enum: [OWNER, ADMIN, MEMBER] }
+        permissions: { type: array, items: { type: string }, description: What the caller may do }
+        memberCount: { type: integer }
+
+    HouseholdResponse:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            household: { $ref: '#/components/schemas/Household' }
+
+    Member:
+      type: object
+      properties:
+        id: { type: string, format: uuid, description: Membership id (use it in member routes) }
+        role: { type: string, enum: [OWNER, ADMIN, MEMBER] }
+        joinedAt: { type: string, format: date-time }
+        user:
+          type: object
+          properties:
+            id: { type: string, format: uuid }
+            fullName: { type: string }
+            email: { type: string, format: email }
+            avatarUrl: { type: [string, 'null'] }
 
     Error:
       type: object

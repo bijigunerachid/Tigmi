@@ -10,6 +10,12 @@ export const AUDIT_ACTIONS = Object.freeze({
   ACCOUNT_LOCKED: 'auth.account_locked',
   LOGOUT: 'auth.logout',
   REFRESH_TOKEN_REUSE: 'auth.refresh_token_reuse',
+  HOUSEHOLD_CREATED: 'household.created',
+  HOUSEHOLD_UPDATED: 'household.updated',
+  HOUSEHOLD_DELETED: 'household.deleted',
+  MEMBER_ROLE_CHANGED: 'member.role_changed',
+  MEMBER_REMOVED: 'member.removed',
+  MEMBER_LEFT: 'member.left',
 });
 
 /**

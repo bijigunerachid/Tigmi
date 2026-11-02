@@ -1,6 +1,8 @@
 import pino from 'pino';
+import request from 'supertest';
 import { createApp } from '../../src/app.js';
 import { createPrismaClient } from '../../src/config/database.js';
+import { hashPassword } from '../../src/modules/auth/password.js';
 import { createMailService } from '../../src/modules/mail/mail.service.js';
 import { createTestEnv } from './test-env.js';
 
@@ -101,3 +103,29 @@ export const validUser = (overrides = {}) => ({
   password: 'a long family passphrase',
   ...overrides,
 });
+
+let sharedHashPromise;
+const TEST_PASSWORD = 'a long family passphrase';
+
+/**
+ * Creates a verified user directly in the database and signs in through the real API.
+ * Returns { user, accessToken, auth } where `auth` is the Authorization header value.
+ */
+export async function createSignedInUser(ctx, { fullName = 'Test User', email } = {}) {
+  sharedHashPromise ??= hashPassword(TEST_PASSWORD);
+  const address = email ?? `user-${Math.random().toString(36).slice(2, 10)}@example.com`;
+  const user = await ctx.prisma.user.create({
+    data: {
+      fullName,
+      email: address,
+      passwordHash: await sharedHashPromise,
+      emailVerifiedAt: new Date(),
+    },
+  });
+  const res = await request(ctx.app)
+    .post('/api/v1/auth/login')
+    .send({ email: address, password: TEST_PASSWORD });
+  if (res.status !== 200) throw new Error(`Login failed in test helper: ${res.status}`);
+  const accessToken = res.body.data.accessToken;
+  return { user, accessToken, auth: `Bearer ${accessToken}` };
+}

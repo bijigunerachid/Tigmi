@@ -19,6 +19,9 @@ export function errorHandler(err, req, res, next) {
     error = new AppError(400, 'INVALID_JSON', 'Request body is not valid JSON');
   } else if (err?.type === 'entity.too.large') {
     error = new AppError(413, 'PAYLOAD_TOO_LARGE', 'Request body is too large');
+  } else if (err?.code === 'P2025') {
+    // Prisma "record not found": e.g. deleted by someone else between the access check and the query.
+    error = notFound();
   }
 
   if (!(error instanceof AppError)) {

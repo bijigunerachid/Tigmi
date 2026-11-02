@@ -16,6 +16,12 @@ enum Language {
   ar
 }
 
+enum HouseholdRole {
+  OWNER
+  ADMIN
+  MEMBER
+}
+
 enum UserTokenPurpose {
   EMAIL_VERIFICATION
   PASSWORD_RESET
@@ -36,9 +42,10 @@ model User {
   createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt         DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  sessions   Session[]
-  auditLogs  AuditLog[]
-  userTokens UserToken[]
+  sessions    Session[]
+  auditLogs   AuditLog[]
+  userTokens  UserToken[]
+  memberships HouseholdMember[]
 
   @@map("users")
 }
@@ -78,6 +85,39 @@ model RefreshToken {
   @@map("refresh_tokens")
 }
 
+/// A home shared by its members. Every household-scoped table references it.
+model Household {
+  id          String   @id @default(uuid(7)) @db.Uuid
+  name        String   @db.VarChar(100)
+  description String?  @db.VarChar(500)
+  /// ISO 4217 code used to display every amount in this household.
+  currency    String   @default("MAD") @db.Char(3)
+  /// IANA time zone used for due dates, reminders and "this month" boundaries.
+  timezone    String   @default("Africa/Casablanca") @db.VarChar(64)
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  members HouseholdMember[]
+
+  @@map("households")
+}
+
+/// Links a user to a household with a role. A user has at most one membership per household.
+model HouseholdMember {
+  id          String        @id @default(uuid(7)) @db.Uuid
+  householdId String        @map("household_id") @db.Uuid
+  userId      String        @map("user_id") @db.Uuid
+  role        HouseholdRole @default(MEMBER)
+  joinedAt    DateTime      @default(now()) @map("joined_at") @db.Timestamptz(3)
+
+  household Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([householdId, userId])
+  @@index([userId])
+  @@map("household_members")
+}
+
 /// Single-use links sent by email (verify address, reset password).
 /// Only the SHA-256 hash is stored; the raw token exists only in the email.
 model UserToken {
@@ -98,7 +138,8 @@ model UserToken {
 /// Append-only record of security-relevant and household actions.
 model AuditLog {
   id          String   @id @default(uuid(7)) @db.Uuid
-  /// Set for household-scoped actions (households arrive in feature/households).
+  /// Set for household-scoped actions. Deliberately no foreign key: the audit trail of a
+  /// deleted household is kept.
   householdId String?  @map("household_id") @db.Uuid
   /// Kept when the user is deleted (SetNull) so history survives.
   userId      String?  @map("user_id") @db.Uuid

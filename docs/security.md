@@ -50,9 +50,20 @@ and every accepted risk with a review date.
 | SMTP outage                           | Never fails the user's request (logged); emails in flight are flushed on graceful shutdown. Durable retries arrive with the Phase 7 job queue.                                                                                                                           |
 | Credentials in transit                | Production refuses to start without SMTP credentials and forces TLS (`requireTLS` or implicit TLS).                                                                                                                                                                      |
 
+## Household authorization (Phase 2 — `feature/households`)
+
+| Threat                               | Defence                                                                                                                                                   |
+| ------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Reading another family's data (IDOR) | Membership of the **authenticated** user is checked in the database on every household route; ids from the URL are never trusted. Tested for every route. |
+| Discovering that a household exists  | Non-members, unknown ids and malformed ids all get the same `404 HOUSEHOLD_NOT_FOUND`.                                                                    |
+| Privilege escalation                 | Permission map per role + hierarchy rule (no self-promotion, admins cannot create admins or touch owners). Ownership fields sent by clients are rejected. |
+| Cross-household member tampering     | Member ids are always looked up together with the household id from the URL (`MEMBER_NOT_FOUND` otherwise).                                               |
+| Orphaned household / race conditions | Last-owner rule inside a transaction with a row lock (`FOR UPDATE`); actor role re-read inside the lock.                                                  |
+| Accidental deletion                  | Deleting a household requires typing its exact name; the audit trail is kept (no foreign key from `audit_logs`).                                          |
+| Forensics                            | `household.created/updated/deleted`, `member.role_changed/removed/left` audited with actor, target and old/new role.                                      |
+
 ## Planned
 
-- **feature/households:** server-side household membership + permission checks on every request.
 - **feature/settings:** list/revoke sessions per device, "sign out everywhere", change password.
 - **Phase 10:** OWASP ASVS review, TLS at the reverse proxy, JWT key rotation (`kid`), shared
   rate-limit store, backups encrypted at rest, restore drill.
