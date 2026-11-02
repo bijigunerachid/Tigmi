@@ -1,0 +1,7 @@
+# Normalise line endings in the repository; shell scripts must stay LF for Linux containers.
+* text=auto eol=lf
+*.sh text eol=lf
+*.png binary
+*.jpg binary
+*.ico binary
+*.woff2 binary

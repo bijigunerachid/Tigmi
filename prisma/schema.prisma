@@ -1,0 +1,11 @@
+// Tigmi database schema.
+// Models arrive step by step (users and sessions in feature/auth-core).
+// Connection URL lives in prisma.config.js (Prisma 7), never in this file.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
