@@ -26,6 +26,7 @@ export function errorHandler(err, req, res, next) {
     error = new AppError(500, 'INTERNAL_ERROR', 'An unexpected error occurred');
   }
 
+  if (error.headers) res.set(error.headers);
   res.status(error.status).json({
     error: {
       code: error.code,

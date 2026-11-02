@@ -16,12 +16,12 @@ production). This keeps authentication cookies `SameSite=Strict` and avoids cros
 
 npm workspaces (`package.json` → `workspaces`):
 
-| Workspace     | Package      | Role                                                                          |
-| ------------- | ------------ | ----------------------------------------------------------------------------- |
-| `apps/api`    | `@tigmi/api` | REST API                                                                      |
-| `apps/web`    | `@tigmi/web` | React web app                                                                 |
-| `apps/mobile` | —            | Expo app, created in Phase 8                                                  |
-| `packages/*`  | —            | Shared Zod schemas/constants, created when first shared code exists (Phase 2) |
+| Workspace             | Package             | Role                                              |
+| --------------------- | ------------------- | ------------------------------------------------- |
+| `apps/api`            | `@tigmi/api`        | REST API                                          |
+| `apps/web`            | `@tigmi/web`        | React web app                                     |
+| `apps/mobile`         | —                   | Expo app, created in Phase 8                      |
+| `packages/validation` | `@tigmi/validation` | Zod request schemas shared by API, web and mobile |
 
 Root holds tooling shared by all workspaces: ESLint, Prettier, Playwright, Prisma (`prisma/`,
 `prisma.config.js`) and Docker Compose. A single git-ignored `.env` at the root configures everything.
@@ -30,13 +30,18 @@ Root holds tooling shared by all workspaces: ESLint, Prettier, Playwright, Prism
 
 ```
 server.js            process entry: validate env → logger → Prisma → listen → graceful shutdown
-app.js               createApp({ env, prisma, logger }): middleware order + routers (no globals)
+app.js               createApp({ env, prisma, logger, security }): middleware order + routers (no globals)
 config/env.js        Zod schema for environment variables (fails fast, never prints values)
 config/logger.js     Pino logger with redaction of credentials
 config/database.js   Prisma client with the node-postgres driver adapter
-middleware/          cross-cutting middleware (error handler, later auth/RBAC/validation)
-modules/<name>/      one folder per feature: <name>.routes.js, .controller.js, .service.js, .schemas.js
-utils/errors.js      AppError (status + stable code)
+config/security.js   token lifetimes, lockout, rate limits, cookie names (overridable in tests)
+middleware/          authenticate (Bearer + live session check), validateBody (Zod), rate-limit, errors
+modules/<name>/      one folder per feature: <name>.routes.js, .controller.js, .service.js
+modules/auth/        + password.js (Argon2id), tokens.js (JWT, opaque tokens), cookies.js
+modules/audit/       audit.service.js: append-only audit log writer
+modules/users/       users.serializer.js: the only public shape of a user
+utils/errors.js      AppError (status + stable code + optional headers) and helpers
+openapi.yaml         OpenAPI 3.1 description of every endpoint (kept in sync in each step)
 ```
 
 **Dependency injection by function arguments.** `createApp` receives `env`, `prisma` and `logger`;
@@ -44,7 +49,12 @@ modules receive what they need through factory functions. Tests build an app aga
 database (or an unreachable one) without mocking modules.
 
 **Middleware order:** request id + logging → Helmet → CORS (allow-list) → JSON body (100 kB max)
-→ `/api/v1` routers → 404 → error handler.
+→ cookie parser → `/api/v1/health` → global rate limit → feature routers (route-level rate limit →
+validation → authentication → controller) → 404 → error handler.
+
+**Layers.** Routes wire middleware; controllers translate HTTP (cookies, status codes, web vs
+mobile); services hold business rules and talk to Prisma. Shared request schemas live in
+`packages/validation` (`@tigmi/validation`) so the web and mobile forms apply the same rules.
 
 ### Response format
 
@@ -60,9 +70,31 @@ returned in the `X-Request-Id` header and appears in server logs, so a user-repo
 
 ### Endpoints so far
 
-| Method | Path             | Auth | Response                                                                      |
-| ------ | ---------------- | ---- | ----------------------------------------------------------------------------- |
-| GET    | `/api/v1/health` | none | 200 `{status:"ok",database:"up"}` · 503 `{status:"degraded",database:"down"}` |
+| Method | Path                    | Auth                                | Response                                                                      |
+| ------ | ----------------------- | ----------------------------------- | ----------------------------------------------------------------------------- |
+| GET    | `/api/v1/health`        | none                                | 200 `{status:"ok",database:"up"}` · 503 `{status:"degraded",database:"down"}` |
+| POST   | `/api/v1/auth/register` | none                                | 201 user + access token (+ cookies on web / refresh token on mobile)          |
+| POST   | `/api/v1/auth/login`    | none                                | 200 same as register                                                          |
+| POST   | `/api/v1/auth/refresh`  | cookie + CSRF header, or body token | 200 rotated tokens                                                            |
+| POST   | `/api/v1/auth/logout`   | Bearer                              | 204                                                                           |
+| GET    | `/api/v1/auth/me`       | Bearer                              | 200 user                                                                      |
+
+Full contract: [`apps/api/openapi.yaml`](../apps/api/openapi.yaml).
+
+### Authentication flow
+
+```
+register/login ──► session row (1 per device, 30-day absolute expiry)
+               ──► access JWT (15 min, HS256, claims sub + sid)
+               ──► refresh token (random 256-bit; DB stores SHA-256)
+                     web: HttpOnly cookie tigmi_rt (path /api/v1/auth) + readable tigmi_csrf
+                     mobile (X-Client-Type: mobile): in the body → Expo SecureStore
+
+every request ──► Bearer JWT verified ──► session loaded: active? ──► req.auth
+
+refresh ──► token found & unused ──► mark used (compare-and-swap) + issue new one
+        └─► token already used: <10 s ago → 409 retry · older → revoke whole session (theft)
+```
 
 ## Database
 
@@ -74,7 +106,10 @@ returned in the `X-Request-Id` header and appears in server logs, so a user-repo
   natively and stably, or if Prisma 8 removes it.
 - Prisma 7 needs a **driver adapter** (`@prisma/adapter-pg` + `pg`); the connection URL lives in
   `prisma.config.js`, not in `schema.prisma`.
-- Conventions (from Phase 2): UUID primary keys, `Decimal(12,2)` for money (serialised as strings),
+- Migrations: `npm run db:migrate` (= `prisma migrate dev && prisma generate`; Prisma 7's
+  `migrate dev` no longer regenerates the client by itself — found the hard way in Phase 2).
+- Tables so far: `users`, `sessions`, `refresh_tokens`, `audit_logs` (snake_case names via `@map`).
+- Conventions: UUIDv7 primary keys (time-ordered, index-friendly), `timestamptz` columns, `Decimal(12,2)` for money (serialised as strings),
   `createdAt`/`updatedAt` on every table, explicit `onDelete` on every relation.
 
 ## Web (`apps/web/src`)
