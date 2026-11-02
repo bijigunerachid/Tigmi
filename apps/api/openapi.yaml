@@ -1,0 +1,257 @@
+openapi: 3.1.0
+info:
+  title: Tigmi API
+  version: 0.2.0
+  description: |
+    REST API for Tigmi. All paths are prefixed with `/api/v1`.
+
+    **Authentication.** Send `Authorization: Bearer <accessToken>` (valid 15 minutes).
+    Web clients keep the refresh token in the HttpOnly cookie `tigmi_rt` (path `/api/v1/auth`) and
+    must echo the `tigmi_csrf` cookie in the `X-CSRF-Token` header when calling `/auth/refresh`.
+    Mobile clients send `X-Client-Type: mobile` on register/login and receive the refresh token
+    in the body instead.
+
+    **Errors** always look like `{ "error": { "code", "message", "details"?, "requestId" } }`.
+servers:
+  - url: /api/v1
+
+tags:
+  - name: System
+  - name: Auth
+
+paths:
+  /health:
+    get:
+      tags: [System]
+      summary: API and database status
+      responses:
+        '200':
+          description: Healthy
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/HealthResponse' }
+        '503':
+          description: API up, database unreachable
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/HealthResponse' }
+
+  /auth/register:
+    post:
+      tags: [Auth]
+      summary: Create an account and start a session
+      description: Rate limited (5 per hour per IP).
+      parameters: [{ $ref: '#/components/parameters/ClientType' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RegisterRequest' }
+      responses:
+        '201':
+          description: Account created. Web clients also receive `tigmi_rt` and `tigmi_csrf` cookies.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuthResponse' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '409':
+          description: '`EMAIL_TAKEN`'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: Sign in and start a session (one session per device)
+      description: |
+        Rate limited (10 per 15 minutes per IP). After 5 consecutive wrong passwords the account
+        is locked for 15 minutes (`ACCOUNT_LOCKED`, with `Retry-After`).
+      parameters: [{ $ref: '#/components/parameters/ClientType' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LoginRequest' }
+      responses:
+        '200':
+          description: Signed in
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuthResponse' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401':
+          description: '`INVALID_CREDENTIALS` (same answer for unknown email and wrong password)'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
+  /auth/refresh:
+    post:
+      tags: [Auth]
+      summary: Exchange a refresh token for new tokens (rotation)
+      description: |
+        Every refresh token works once. Re-using an already rotated token (more than 10 seconds
+        after rotation) revokes the whole session. Web: cookie + `X-CSRF-Token` header.
+        Mobile: `refreshToken` in the body.
+      parameters:
+        - name: X-CSRF-Token
+          in: header
+          required: false
+          description: Required for cookie-based (web) refresh; value of the `tigmi_csrf` cookie.
+          schema: { type: string }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                refreshToken: { type: string, description: Mobile clients only }
+      responses:
+        '200':
+          description: New access token (and rotated refresh token)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuthResponse' }
+        '401':
+          description: '`INVALID_REFRESH_TOKEN` (missing, unknown, expired, revoked or reused)'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '403':
+          description: '`CSRF_TOKEN_INVALID`'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '409':
+          description: '`REFRESH_IN_PROGRESS` — another tab just refreshed; retry once'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
+  /auth/logout:
+    post:
+      tags: [Auth]
+      summary: Sign out the current device
+      security: [{ bearerAuth: [] }]
+      responses:
+        '204': { description: Session revoked, cookies cleared }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+
+  /auth/me:
+    get:
+      tags: [Auth]
+      summary: Current user
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: The signed-in user
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      user: { $ref: '#/components/schemas/User' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+
+components:
+  securitySchemes:
+    bearerAuth: { type: http, scheme: bearer, bearerFormat: JWT }
+
+  parameters:
+    ClientType:
+      name: X-Client-Type
+      in: header
+      required: false
+      description: '`mobile` → refresh token returned in the body, no cookies.'
+      schema: { type: string, enum: [mobile] }
+
+  responses:
+    ValidationError:
+      description: '`VALIDATION_ERROR` with `details: [{ field, code }]`'
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Unauthenticated:
+      description: '`UNAUTHENTICATED`, `INVALID_ACCESS_TOKEN` or `SESSION_REVOKED`'
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    TooManyRequests:
+      description: '`RATE_LIMITED` or `ACCOUNT_LOCKED`; see `Retry-After` header'
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+
+  schemas:
+    HealthResponse:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            status: { type: string, enum: [ok, degraded] }
+            database: { type: string, enum: [up, down] }
+
+    RegisterRequest:
+      type: object
+      additionalProperties: false
+      required: [fullName, email, password]
+      properties:
+        fullName: { type: string, minLength: 2, maxLength: 100 }
+        email: { type: string, format: email, maxLength: 254 }
+        password: { type: string, minLength: 12, maxLength: 128 }
+        preferredLanguage: { type: string, enum: [fr, ar], default: fr }
+
+    LoginRequest:
+      type: object
+      additionalProperties: false
+      required: [email, password]
+      properties:
+        email: { type: string, format: email }
+        password: { type: string, maxLength: 128 }
+
+    User:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        fullName: { type: string }
+        email: { type: string, format: email }
+        avatarUrl: { type: [string, 'null'] }
+        preferredLanguage: { type: string, enum: [fr, ar] }
+        emailVerified: { type: boolean }
+        createdAt: { type: string, format: date-time }
+
+    AuthResponse:
+      type: object
+      properties:
+        data:
+          type: object
+          required: [user, accessToken, accessTokenExpiresAt]
+          properties:
+            user: { $ref: '#/components/schemas/User' }
+            accessToken: { type: string }
+            accessTokenExpiresAt: { type: string, format: date-time }
+            csrfToken: { type: string, description: Web clients only }
+            refreshToken: { type: string, description: Mobile clients only }
+            sessionExpiresAt: { type: string, format: date-time, description: Mobile clients only }
+
+    Error:
+      type: object
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code: { type: string }
+            message: { type: string }
+            details: { type: array, items: { type: object } }
+            requestId: { type: string }

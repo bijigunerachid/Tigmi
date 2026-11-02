@@ -6,7 +6,7 @@ Tigmi is a bilingual (French / Arabic with full RTL) family home management plat
 budgets, bills, shopping lists, tasks, calendar and home inventory, shared by a household.
 It has a responsive web app, an Expo mobile app (Phase 8) and one shared REST API.
 
-**Status:** Phase 1 — Foundation. See [docs/roadmap.md](docs/roadmap.md).
+**Status:** Phase 2 — Authentication (API: register, login, sessions, logout). See [docs/roadmap.md](docs/roadmap.md).
 
 ## Stack
 
@@ -69,19 +69,19 @@ Open http://localhost:5180 — the **État du système** card should show **API:
 
 ## Scripts
 
-| Command                    | What it does                                                    |
-| -------------------------- | --------------------------------------------------------------- |
-| `npm run dev`              | API + web with auto-reload                                      |
-| `npm run services:up/down` | Start / stop Docker services (data is kept in a Docker volume)  |
-| `npm run db:migrate`       | Create and apply a new migration after editing `schema.prisma`  |
-| `npm run db:deploy`        | Apply existing migrations                                       |
-| `npm run lint`             | ESLint                                                          |
-| `npm run format`           | Prettier (write); `format:check` to only check                  |
-| `npm test`                 | API unit + integration tests (real `tigmi_test` DB) + web tests |
-| `npm run test:e2e`         | Playwright: real API + web, desktop 1366px and phone 390px      |
-| `npm run build`            | Production build of the web app                                 |
-| `npm run audit`            | Blocking audit of production dependencies; `audit:all` = all    |
-| `npm run check`            | lint + format + tests + build + audit (run before every commit) |
+| Command                    | What it does                                                                         |
+| -------------------------- | ------------------------------------------------------------------------------------ |
+| `npm run dev`              | API + web with auto-reload                                                           |
+| `npm run services:up/down` | Start / stop Docker services (data is kept in a Docker volume)                       |
+| `npm run db:migrate`       | Create + apply a migration after editing `schema.prisma`, then regenerate the client |
+| `npm run db:deploy`        | Apply existing migrations                                                            |
+| `npm run lint`             | ESLint                                                                               |
+| `npm run format`           | Prettier (write); `format:check` to only check                                       |
+| `npm test`                 | API unit + integration tests (real `tigmi_test` DB) + web tests                      |
+| `npm run test:e2e`         | Playwright: real API + web, desktop 1366px and phone 390px                           |
+| `npm run build`            | Production build of the web app                                                      |
+| `npm run audit`            | Blocking audit of production dependencies; `audit:all` = all                         |
+| `npm run check`            | lint + format + tests + build + audit (run before every commit)                      |
 
 ## Project layout
 
@@ -91,7 +91,7 @@ prisma/       schema + migrations            e2e/       Playwright tests
 docker/       container init scripts         docs/      roadmap, architecture, security
 ```
 
-More: [architecture](docs/architecture.md) · [security](docs/security.md) · [roadmap](docs/roadmap.md)
+More: [architecture](docs/architecture.md) · [security](docs/security.md) · [roadmap](docs/roadmap.md) · [API contract (OpenAPI)](apps/api/openapi.yaml)
 
 ## Troubleshooting
 

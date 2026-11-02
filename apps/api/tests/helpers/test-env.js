@@ -26,6 +26,8 @@ export function createTestEnv(overrides = {}) {
     DATABASE_URL: getTestDatabaseUrl(),
     CORS_ORIGINS: 'http://localhost:5180',
     LOG_LEVEL: 'silent',
+    // Test-only signing key: never used outside the test process.
+    JWT_ACCESS_SECRET: 'test-only-secret-'.padEnd(64, 'x'),
     ...overrides,
   });
 }

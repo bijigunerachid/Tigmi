@@ -3,31 +3,47 @@
 Security is built in from the first commit. This file records what is in place, what is planned,
 and every accepted risk with a review date.
 
-## In place (Phase 1)
+## Platform (Phase 1)
 
-| Area              | Measure                                                                                                                                                                                                 |
-| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Secrets           | Only in git-ignored `.env`; `.env.example` holds placeholders. Local DB password is random.                                                                                                             |
-| Config validation | Zod validates all env vars at startup; production rejects the example password and non-HTTPS origins. Error messages list variable **names only**, never values.                                        |
-| Network exposure  | Docker ports bound to `127.0.0.1` (database not reachable from the LAN).                                                                                                                                |
-| HTTP headers      | Helmet (CSP, `nosniff`, HSTS, frame protections, …); `X-Powered-By` removed.                                                                                                                            |
-| CORS              | Explicit allow-list (`CORS_ORIGINS`), credentials only for listed origins.                                                                                                                              |
-| Input limits      | JSON bodies capped at 100 kB; malformed JSON → `400 INVALID_JSON`.                                                                                                                                      |
-| Error handling    | Clients get a stable `code` + generic message; stack traces and internals only in server logs.                                                                                                          |
-| Logging           | Pino redacts `Authorization`, cookies, `Set-Cookie`, CSRF header, and any `password`/`token` fields. Incoming `X-Request-Id` accepted only if it matches `^[\w-]{8,64}$` (blocks log/header injection). |
-| Health endpoint   | Reveals only `up`/`down`; never versions, hostnames or error text. `Cache-Control: no-store`.                                                                                                           |
-| Tests vs. data    | Test helpers refuse databases whose name does not end in `_test`.                                                                                                                                       |
-| Supply chain      | Exact version pins + lockfile + `npm ci`; 14-day minimum package age; dependency install scripts not approved; GitHub Actions pinned to commit SHAs; CI permissions `contents: read`.                   |
-| Child processes   | Test setup runs the Prisma CLI via `node` directly (no shell).                                                                                                                                          |
+| Area              | Measure                                                                                                                                                                                            |
+| ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Secrets           | Only in git-ignored `.env`; `.env.example` holds placeholders. Local DB password and JWT secret are random. CI generates a fresh JWT secret per run.                                               |
+| Config validation | Zod validates all env vars at startup. Production rejects example passwords/secrets, non-HTTPS origins and `COOKIE_SECURE=false`. Error messages list variable **names only**, never values.       |
+| Network exposure  | Docker ports bound to `127.0.0.1` (database not reachable from the LAN).                                                                                                                           |
+| HTTP headers      | Helmet (CSP, `nosniff`, HSTS, frame protections, …); `X-Powered-By` removed.                                                                                                                       |
+| CORS              | Explicit allow-list (`CORS_ORIGINS`), credentials only for listed origins.                                                                                                                         |
+| Input             | JSON bodies capped at 100 kB; malformed JSON → `400 INVALID_JSON`. Every body validated by a shared Zod schema; **unknown fields are rejected** (no mass assignment, e.g. a self-assigned `role`). |
+| Error handling    | Clients get a stable `code` + generic message; stack traces and internals only in server logs.                                                                                                     |
+| Logging           | Pino redacts `Authorization`, cookies, `Set-Cookie`, CSRF header, and any `password`/`token` fields (tested). Incoming `X-Request-Id` accepted only if it matches `^[\w-]{8,64}$`.                 |
+| Health endpoint   | Reveals only `up`/`down`; never versions, hostnames or error text. `Cache-Control: no-store`.                                                                                                      |
+| Tests vs. data    | Test helpers refuse databases whose name does not end in `_test`.                                                                                                                                  |
+| Supply chain      | Exact version pins + lockfile + `npm ci`; 14-day minimum package age; dependency install scripts not approved; GitHub Actions pinned to commit SHAs; CI permissions `contents: read`.              |
+| Child processes   | Test setup runs the Prisma CLI via `node` directly (no shell).                                                                                                                                     |
 
-## Planned (by phase)
+## Authentication (Phase 2 — `feature/auth-core`)
 
-- **Phase 2 (auth):** Argon2id hashing, short-lived JWT access tokens (memory only on web), opaque
-  refresh tokens stored hashed with rotation + reuse detection, `HttpOnly; Secure; SameSite=Strict`
-  cookies scoped to `/api/v1/auth`, CSRF double-submit token, rate limiting + account lockout,
-  server-side household membership + permission checks on every request, audit log, email
-  verification and password reset with single-use hashed tokens.
-- **Phase 10:** OWASP ASVS review, TLS at the reverse proxy, backups encrypted at rest, restore drill.
+| Threat                      | Defence                                                                                                                                                                                                                                                          |
+| --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Stolen password database    | Argon2id (m=19 MiB, t=2, p=1 — OWASP). Hashes with older parameters are upgraded on next login.                                                                                                                                                                  |
+| Weak passwords              | 12–128 characters, any Unicode (French/Arabic passphrases), must differ from the email. No forced character classes (NIST SP 800-63B).                                                                                                                           |
+| Online guessing             | Per-IP rate limits (login 10/15 min, register 5/h, refresh 60/15 min, global 300/min) + account lock for 15 min after 5 consecutive failures (atomic counter).                                                                                                   |
+| Account discovery via login | Same `401 INVALID_CREDENTIALS` for unknown email and wrong password; unknown emails still run one Argon2 verification so timing matches.                                                                                                                         |
+| XSS stealing tokens         | Refresh token only in an `HttpOnly` cookie (path `/api/v1/auth`); access token lives 15 min and is kept in memory by the web app. A cookie-based refresh never returns the refresh token in the body.                                                            |
+| CSRF                        | Cookies are `SameSite=Strict`; cookie-based `/auth/refresh` also requires `X-CSRF-Token` equal to the `tigmi_csrf` cookie (double-submit, constant-time compare). All other endpoints use the `Authorization` header, which browsers never attach automatically. |
+| Stolen refresh token        | Stored only as SHA-256; rotated on every use (compare-and-swap, one winner). Re-use of a rotated token revokes the **whole session** and is audited (`auth.refresh_token_reuse`). 10 s grace → `409 REFRESH_IN_PROGRESS` for two tabs refreshing at once.        |
+| Logout / lost device        | Sessions are checked in the database on **every** authenticated request, so logout and revocation take effect immediately (not after the 15-min token expiry). Sessions have an absolute 30-day lifetime that rotation never extends.                            |
+| JWT attacks                 | HS256 only (`alg: none` and other algorithms rejected), issuer + audience + expiry verified, 32+ byte secret enforced at startup.                                                                                                                                |
+| Data leaks in responses     | Users are serialised through an allow-list (`toPublicUser`) — password hash and lockout fields can never leak. Auth responses send `Cache-Control: no-store`.                                                                                                    |
+| Forensics                   | Append-only `audit_logs`: register, login, failed login (reason), account locked, logout, token reuse — with IP, never with secrets.                                                                                                                             |
+
+## Planned
+
+- **feature/auth-email:** email verification and password reset (single-use, hashed, expiring tokens);
+  password reset revokes all sessions.
+- **feature/households:** server-side household membership + permission checks on every request.
+- **feature/settings:** list/revoke sessions per device, "sign out everywhere", change password.
+- **Phase 10:** OWASP ASVS review, TLS at the reverse proxy, JWT key rotation (`kid`), shared
+  rate-limit store, backups encrypted at rest, restore drill.
 
 ## Dependency audit policy
 
@@ -37,6 +53,10 @@ and every accepted risk with a review date.
 
 ## Accepted risks
 
-| Date       | Finding                                                                                                                           | Scope                  | Why accepted                                                                                                                                                                                                                     | Review                                                                                                      |
-| ---------- | --------------------------------------------------------------------------------------------------------------------------------- | ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| 2026-11-02 | 21 moderate + 3 low via `minimatch` <11.0.1 (ReDoS), `glob` ≤14.0.1 (AbortSignal bypass), `deepmerge` 4.3.1 (prototype pollution) | Dev only: ESLint, Jest | Only process glob patterns and config written by us, never user input; not shipped. Fixes exist only in new majors released 2026-10-27+ (younger than our 14-day rule) and forcing them into ESLint/Jest risks breaking tooling. | 2026-11-16: retry with `overrides` once fixes are ≥14 days old, or upgrade ESLint/Jest when they adopt them |
+| Date       | Finding                                                                                                                           | Why accepted                                                                                                                                                                                                       | Review                                               |
+| ---------- | --------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------- |
+| 2026-11-02 | 21 moderate + 3 low via `minimatch` <11.0.1 (ReDoS), `glob` ≤14.0.1 (AbortSignal bypass), `deepmerge` 4.3.1 (prototype pollution) | Dev only (ESLint, Jest): process glob patterns and config written by us, never user input; not shipped. Fixes exist only in new majors released 2026-10-27+ (younger than our 14-day rule).                        | 2026-11-16: retry `overrides` or upgrade ESLint/Jest |
+| 2026-11-02 | Registration answers `409 EMAIL_TAKEN`, revealing that an email has an account                                                    | Needed for clear UX until email verification exists; register is limited to 5/h per IP. Fix: in `feature/auth-email`, answer the same for new and existing emails and send "you already have an account" by email. | `feature/auth-email`                                 |
+| 2026-11-02 | `ACCOUNT_LOCKED` reveals an account exists, and an attacker can lock a victim out for 15 min                                      | Standard trade-off of account lockout; lock is short and auto-expires, and per-IP rate limits slow mass locking. Password reset (next step) gives victims a way back in.                                           | Phase 10 ASVS review                                 |
+| 2026-11-02 | Rate limits are kept in memory                                                                                                    | Correct for a single API instance; counters reset on restart. Must move to a shared store (PostgreSQL) before running more than one instance.                                                                      | Phase 10 (before horizontal scaling)                 |
+| 2026-11-02 | No breached-password check (e.g. Have I Been Pwned)                                                                               | Requires an external service call on registration; length policy + lockout cover the basics.                                                                                                                       | `feature/settings` (with change password)            |

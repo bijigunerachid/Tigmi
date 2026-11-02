@@ -1,18 +1,27 @@
 import { randomUUID } from 'node:crypto';
+import cookieParser from 'cookie-parser';
 import cors from 'cors';
 import express from 'express';
 import helmet from 'helmet';
 import { pinoHttp } from 'pino-http';
+import { createSecurityConfig } from './config/security.js';
+import { createAuthenticate } from './middleware/authenticate.js';
 import { errorHandler, notFoundHandler } from './middleware/error-handler.js';
+import { createRateLimiter } from './middleware/rate-limit.js';
+import { createAuditService } from './modules/audit/audit.service.js';
+import { createAuthRouter } from './modules/auth/auth.routes.js';
+import { createAccessTokenSigner } from './modules/auth/tokens.js';
 import { createHealthRouter } from './modules/health/health.routes.js';
 
 const REQUEST_ID_PATTERN = /^[\w-]{8,64}$/;
 
 /**
  * Builds the Express application. Dependencies are passed in (not imported globally)
- * so tests can create an app against the test database or a failing database.
+ * so tests can create an app against the test database or a failing database, and
+ * override security settings (e.g. tiny rate limits) through `security`.
  */
-export function createApp({ env, prisma, logger }) {
+export function createApp({ env, prisma, logger, security }) {
+  const config = createSecurityConfig(security);
   const app = express();
 
   app.disable('x-powered-by');
@@ -41,15 +50,31 @@ export function createApp({ env, prisma, logger }) {
       origin: env.CORS_ORIGINS,
       credentials: true,
       methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE'],
-      allowedHeaders: ['Content-Type', 'Authorization', 'X-CSRF-Token', 'X-Request-Id'],
-      exposedHeaders: ['X-Request-Id'],
+      allowedHeaders: [
+        'Content-Type',
+        'Authorization',
+        'X-CSRF-Token',
+        'X-Request-Id',
+        'X-Client-Type',
+      ],
+      exposedHeaders: ['X-Request-Id', 'Retry-After'],
       maxAge: 600,
     }),
   );
   app.use(express.json({ limit: '100kb' }));
+  app.use(cookieParser());
+
+  const audit = createAuditService({ prisma, logger });
+  const accessTokens = createAccessTokenSigner({
+    secret: env.JWT_ACCESS_SECRET,
+    ttlSeconds: config.accessTokenTtlSeconds,
+  });
+  const authenticate = createAuthenticate({ prisma, accessTokens });
 
   const v1 = express.Router();
   v1.use('/health', createHealthRouter({ prisma }));
+  v1.use(createRateLimiter(config.rateLimits.global));
+  v1.use('/auth', createAuthRouter({ prisma, env, config, accessTokens, audit, authenticate }));
   app.use('/api/v1', v1);
 
   app.use(notFoundHandler);

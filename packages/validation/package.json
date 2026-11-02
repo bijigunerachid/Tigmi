@@ -1,0 +1,13 @@
+{
+  "name": "@tigmi/validation",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Zod schemas shared by the Tigmi API, web and mobile apps.",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.js"
+  },
+  "dependencies": {
+    "zod": "4.6.7"
+  }
+}

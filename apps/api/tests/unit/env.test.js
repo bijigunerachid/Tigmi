@@ -4,6 +4,7 @@ const valid = {
   NODE_ENV: 'development',
   DATABASE_URL: 'postgresql://tigmi:secret123@localhost:5432/tigmi',
   CORS_ORIGINS: 'http://localhost:5180, http://localhost:5181',
+  JWT_ACCESS_SECRET: 'a'.repeat(43),
 };
 
 describe('loadEnv', () => {
@@ -12,6 +13,7 @@ describe('loadEnv', () => {
     expect(env.API_PORT).toBe(4000);
     expect(env.LOG_LEVEL).toBe('info');
     expect(env.TRUST_PROXY_HOPS).toBe(0);
+    expect(env.COOKIE_SECURE).toBe(false);
     expect(env.CORS_ORIGINS).toEqual(['http://localhost:5180', 'http://localhost:5181']);
   });
 
@@ -28,6 +30,15 @@ describe('loadEnv', () => {
     expect(() => loadEnv({ ...valid, DATABASE_URL: 'mysql://u:p@localhost/db' })).toThrow(
       /DATABASE_URL: must be a postgresql:\/\/ URL/,
     );
+  });
+
+  it('rejects a JWT secret shorter than 32 bytes', () => {
+    expect(() => loadEnv({ ...valid, JWT_ACCESS_SECRET: 'short' })).toThrow(/JWT_ACCESS_SECRET/);
+  });
+
+  it('parses COOKIE_SECURE as a boolean and rejects other values', () => {
+    expect(loadEnv({ ...valid, COOKIE_SECURE: 'true' }).COOKIE_SECURE).toBe(true);
+    expect(() => loadEnv({ ...valid, COOKIE_SECURE: 'yes' })).toThrow(/COOKIE_SECURE/);
   });
 
   it('rejects an invalid port', () => {
@@ -48,8 +59,23 @@ describe('loadEnv', () => {
       CORS_ORIGINS: 'https://app.tigmi.example',
     };
 
-    it('accepts https origins and a real password', () => {
-      expect(() => loadEnv(production)).not.toThrow();
+    it('accepts https origins and a real password, and defaults COOKIE_SECURE to true', () => {
+      expect(loadEnv(production).COOKIE_SECURE).toBe(true);
+    });
+
+    it('refuses insecure cookies', () => {
+      expect(() => loadEnv({ ...production, COOKIE_SECURE: 'false' })).toThrow(
+        /COOKIE_SECURE: must be true in production/,
+      );
+    });
+
+    it('rejects the example JWT secret', () => {
+      expect(() =>
+        loadEnv({
+          ...production,
+          JWT_ACCESS_SECRET: 'changeme-generate-a-real-secret-with-the-command-above',
+        }),
+      ).toThrow(/JWT_ACCESS_SECRET: uses the example value/);
     });
 
     it('rejects the example password', () => {
