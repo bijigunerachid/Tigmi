@@ -1,29 +1,5 @@
 import { expect, test } from '@playwright/test';
-
-const MAILPIT_API = process.env.MAILPIT_API_URL ?? 'http://localhost:8025/api/v1';
-const PASSWORD = 'a long family passphrase';
-
-/** Waits for the newest `kind` link (verify-email | reset-password) emailed to `to` via Mailpit. */
-async function tokenFromInbox(request, to, kind) {
-  const pattern = new RegExp(`/${kind}#token=([\\w-]{43})`);
-  let token;
-  await expect
-    .poll(
-      async () => {
-        const search = await request.get(
-          `${MAILPIT_API}/search?query=${encodeURIComponent(`to:${to}`)}`,
-        );
-        const [latest] = (await search.json()).messages ?? [];
-        if (!latest) return null;
-        const message = await (await request.get(`${MAILPIT_API}/message/${latest.ID}`)).json();
-        token = pattern.exec(message.Text)?.[1] ?? null;
-        return token;
-      },
-      { timeout: 10_000 },
-    )
-    .not.toBeNull();
-  return token;
-}
+import { PASSWORD, tokenFromInbox, uniqueEmail } from './helpers.js';
 
 // API journey through the Vite proxy with a real cookie jar (same origin as the browser app)
 // and real email delivery through Mailpit. The screens arrive in feature/web-auth.
@@ -34,7 +10,7 @@ test.describe('Auth session journey (HTTP, real cookies, real email)', () => {
     request,
     baseURL,
   }) => {
-    const email = `e2e-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@example.com`;
+    const email = uniqueEmail();
 
     const register = await request.post('/api/v1/auth/register', {
       data: { fullName: 'E2E Famille', email, password: PASSWORD },

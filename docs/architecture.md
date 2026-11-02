@@ -35,11 +35,13 @@ config/env.js        Zod schema for environment variables (fails fast, never pri
 config/logger.js     Pino logger with redaction of credentials
 config/database.js   Prisma client with the node-postgres driver adapter
 config/security.js   token lifetimes, lockout, rate limits, cookie names (overridable in tests)
-middleware/          authenticate (Bearer + live session check), validateBody (Zod), rate-limit, errors
+middleware/          authenticate (Bearer + live session check), household-access (membership +
+                     permission), validateBody (Zod), rate-limit, errors
 modules/<name>/      one folder per feature: <name>.routes.js, .controller.js, .service.js
 modules/auth/        + password.js (Argon2id), tokens.js (JWT, opaque tokens), cookies.js
 modules/audit/       audit.service.js: append-only audit log writer
 modules/mail/        mail.service.js (SMTP, sent off the request path), templates.js (fr/ar, RTL)
+modules/households/  permissions.js (RBAC map), households + members services, routes
 modules/users/       users.serializer.js: the only public shape of a user
 utils/errors.js      AppError (status + stable code + optional headers) and helpers
 openapi.yaml         OpenAPI 3.1 description of every endpoint (kept in sync in each step)
@@ -84,7 +86,47 @@ returned in the `X-Request-Id` header and appears in server logs, so a user-repo
 | POST   | `/api/v1/auth/logout`              | Bearer                              | 204                                                                                           |
 | GET    | `/api/v1/auth/me`                  | Bearer                              | 200 user                                                                                      |
 
+| POST | `/api/v1/households` | Bearer | 201 household (creator = OWNER) |
+| GET | `/api/v1/households` | Bearer | 200 my households (`myRole`, `permissions`, `memberCount`) |
+| GET/PATCH/DELETE | `/api/v1/households/:householdId` | Bearer + permission | 200 / 200 / 204 |
+| GET | `/api/v1/households/:householdId/members` | Bearer + `members:read` | 200 members |
+| PATCH/DELETE | `/api/v1/households/:householdId/members/:memberId` | Bearer + hierarchy | 200 / 204 |
+
 Full contract: [`apps/api/openapi.yaml`](../apps/api/openapi.yaml).
+
+### Household authorization (RBAC)
+
+Every `/households/:householdId/...` route is guarded by
+`can(PERMISSION)` (`middleware/household-access.js`):
+
+1. the id in the URL is untrusted → the membership of the **authenticated** user is read from the
+   database (never from the request body or token);
+2. not a member (or malformed / unknown id) → `404 HOUSEHOLD_NOT_FOUND` — the API never confirms
+   that someone else's household exists;
+3. member without the permission → `403 FORBIDDEN`;
+4. otherwise `req.household = { id, role, memberId }` and the controller runs.
+
+Routes ask for **permissions**, never roles. The map lives in `modules/households/permissions.js`:
+
+| Permission         | OWNER | ADMIN | MEMBER |
+| ------------------ | :---: | :---: | :----: |
+| `household:read`   |   ✓   |   ✓   |   ✓    |
+| `household:update` |   ✓   |       |        |
+| `household:delete` |   ✓   |       |        |
+| `members:read`     |   ✓   |   ✓   |   ✓    |
+| `members:manage`   |   ✓   |   ✓   |        |
+| `members:invite`   |   ✓   |   ✓   |        |
+
+On top of permissions, a **hierarchy rule** applies to changing or removing someone: owners may
+manage anyone; everyone else only members ranked strictly below them, and may only assign lower
+roles (an ADMIN manages MEMBERs but cannot create admins or touch owners). Anyone may leave.
+Several owners are allowed (co-owners); the **last owner** can never be demoted, removed or leave.
+
+Membership changes run in a transaction that first locks the household row
+(`SELECT … FOR UPDATE`) and re-reads the actor's role, so concurrent changes are serialised and
+stale roles cannot be used (tested: two owners demoting each other at once always leaves one owner).
+
+Later modules add their permissions (e.g. `transactions:write`) to the same map.
 
 ### Authentication flow
 
@@ -121,7 +163,8 @@ refresh ──► token found & unused ──► mark used (compare-and-swap) + 
   `postdb:migrate` hook runs `prisma generate` (Prisma 7's `migrate dev` no longer regenerates the
   client itself). Never chain extra commands inside `db:migrate`: npm appends `-- args` to the
   last command, so `--name` would go to the wrong one (found the hard way in Phase 2).
-- Tables so far: `users`, `sessions`, `refresh_tokens`, `user_tokens`, `audit_logs` (snake_case names via `@map`).
+- Tables so far: `users`, `sessions`, `refresh_tokens`, `user_tokens`, `households`,
+  `household_members`, `audit_logs` (snake_case names via `@map`).
 - Conventions: UUIDv7 primary keys (time-ordered, index-friendly), `timestamptz` columns, `Decimal(12,2)` for money (serialised as strings),
   `createdAt`/`updatedAt` on every table, explicit `onDelete` on every relation.
 

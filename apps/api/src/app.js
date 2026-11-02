@@ -12,6 +12,7 @@ import { createAuditService } from './modules/audit/audit.service.js';
 import { createAuthRouter } from './modules/auth/auth.routes.js';
 import { createAccessTokenSigner } from './modules/auth/tokens.js';
 import { createHealthRouter } from './modules/health/health.routes.js';
+import { createHouseholdsRouter } from './modules/households/households.routes.js';
 import { createMailService, createSmtpTransport } from './modules/mail/mail.service.js';
 
 const REQUEST_ID_PATTERN = /^[\w-]{8,64}$/;
@@ -99,6 +100,7 @@ export function createApp({ env, prisma, logger, security, mail }) {
       mail: mailService,
     }),
   );
+  v1.use('/households', createHouseholdsRouter({ prisma, audit, authenticate }));
   app.use('/api/v1', v1);
 
   app.use(notFoundHandler);
