@@ -1,21 +1,44 @@
 import pino from 'pino';
 import { createApp } from '../../src/app.js';
 import { createPrismaClient } from '../../src/config/database.js';
+import { createMailService } from '../../src/modules/mail/mail.service.js';
 import { createTestEnv } from './test-env.js';
 
 const HIGH = { windowSeconds: 60, limit: 10_000 };
 
+/** Transport that keeps sent emails in memory instead of talking to SMTP. */
+export function createMemoryTransport() {
+  const outbox = [];
+  return {
+    outbox,
+    async sendMail(message) {
+      outbox.push(message);
+      return { messageId: `memory-${outbox.length}` };
+    },
+  };
+}
+
 /**
- * App wired to the real test database. Rate limits are effectively disabled unless a test
- * passes its own `security.rateLimits`, so unrelated tests never trip them.
+ * App wired to the real test database and an in-memory mailbox (`outbox`).
+ * Rate limits are effectively disabled unless a test passes its own `security.rateLimits`.
+ * Call `await mail.flush()` before reading `outbox`.
  */
 export function createTestContext({ security = {}, logger } = {}) {
   const env = createTestEnv();
   const prisma = createPrismaClient(env.DATABASE_URL);
+  const resolvedLogger = logger ?? pino({ level: 'silent' });
+  const transport = createMemoryTransport();
+  const mail = createMailService({
+    transport,
+    from: env.MAIL_FROM,
+    appUrl: env.APP_URL,
+    logger: resolvedLogger,
+  });
   const app = createApp({
     env,
     prisma,
-    logger: logger ?? pino({ level: 'silent' }),
+    logger: resolvedLogger,
+    mail,
     security: {
       ...security,
       rateLimits: {
@@ -23,11 +46,26 @@ export function createTestContext({ security = {}, logger } = {}) {
         login: HIGH,
         register: HIGH,
         refresh: HIGH,
+        emailRequest: HIGH,
+        tokenSubmit: HIGH,
         ...security.rateLimits,
       },
     },
   });
-  return { env, prisma, app };
+  return { env, prisma, app, mail, outbox: transport.outbox };
+}
+
+/** Returns the emails sent to an address (waits for in-flight sends first). */
+export async function emailsTo(ctx, address) {
+  await ctx.mail.flush();
+  return ctx.outbox.filter((message) => message.to === address);
+}
+
+/** Extracts the token from a link like https://app/verify-email#token=XXXX. */
+export function tokenFromEmail(message) {
+  const match = /#token=([\w-]{43})/.exec(message.text);
+  if (!match) throw new Error(`No token link in email "${message.subject}"`);
+  return match[1];
 }
 
 /** Empties every application table (keeps Prisma's migration history). */

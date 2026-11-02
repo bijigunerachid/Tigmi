@@ -1,14 +1,19 @@
 openapi: 3.1.0
 info:
   title: Tigmi API
-  version: 0.2.0
+  version: 0.3.0
   description: |
     REST API for Tigmi. All paths are prefixed with `/api/v1`.
+
+    **Account lifecycle.** `register` → email with a verification link
+    (`{APP_URL}/verify-email#token=…`) → `verify-email` → `login`. Accounts must be verified
+    before signing in. Endpoints that may send an email always answer `202 { status: "check_email" }`
+    so they never reveal whether an account exists.
 
     **Authentication.** Send `Authorization: Bearer <accessToken>` (valid 15 minutes).
     Web clients keep the refresh token in the HttpOnly cookie `tigmi_rt` (path `/api/v1/auth`) and
     must echo the `tigmi_csrf` cookie in the `X-CSRF-Token` header when calling `/auth/refresh`.
-    Mobile clients send `X-Client-Type: mobile` on register/login and receive the refresh token
+    Mobile clients send `X-Client-Type: mobile` on login and receive the refresh token
     in the body instead.
 
     **Errors** always look like `{ "error": { "code", "message", "details"?, "requestId" } }`.
@@ -39,26 +44,88 @@ paths:
   /auth/register:
     post:
       tags: [Auth]
-      summary: Create an account and start a session
-      description: Rate limited (5 per hour per IP).
-      parameters: [{ $ref: '#/components/parameters/ClientType' }]
+      summary: Create an account (sends a verification email)
+      description: |
+        Rate limited (5 per hour per IP). Same answer for new and already-registered emails:
+        a new email receives a verification link, an existing one receives an
+        "you already have an account" notice. Does not sign in.
       requestBody:
         required: true
         content:
           application/json:
             schema: { $ref: '#/components/schemas/RegisterRequest' }
       responses:
-        '201':
-          description: Account created. Web clients also receive `tigmi_rt` and `tigmi_csrf` cookies.
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/AuthResponse' }
+        '202': { $ref: '#/components/responses/CheckEmail' }
         '400': { $ref: '#/components/responses/ValidationError' }
-        '409':
-          description: '`EMAIL_TAKEN`'
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/Error' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
+  /auth/verify-email:
+    post:
+      tags: [Auth]
+      summary: Confirm an email address with the token from the email link
+      description: Rate limited (20 per 15 minutes per IP). Tokens expire after 24 hours and work once.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TokenRequest' }
+      responses:
+        '204': { description: Email verified }
+        '400': { $ref: '#/components/responses/InvalidToken' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
+  /auth/resend-verification:
+    post:
+      tags: [Auth]
+      summary: Send a new verification link (unverified accounts only)
+      description: At most one email per account per minute; 5 requests per hour per IP.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EmailRequest' }
+      responses:
+        '202': { $ref: '#/components/responses/CheckEmail' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
+  /auth/forgot-password:
+    post:
+      tags: [Auth]
+      summary: Email a password reset link
+      description: Same answer for unknown emails. At most one email per account per minute.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EmailRequest' }
+      responses:
+        '202': { $ref: '#/components/responses/CheckEmail' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
+  /auth/reset-password:
+    post:
+      tags: [Auth]
+      summary: Set a new password with the token from the reset email
+      description: |
+        Token expires after 1 hour and works once (only the most recent link is valid).
+        Signs out every device, verifies the email, lifts any lockout, and emails a
+        "password changed" notice. A rejected password does not use up the link.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [token, password]
+              properties:
+                token: { type: string, pattern: '^[\w-]{43}$' }
+                password: { type: string, minLength: 12, maxLength: 128 }
+      responses:
+        '204': { description: Password changed; all sessions revoked }
+        '400': { $ref: '#/components/responses/InvalidToken' }
         '429': { $ref: '#/components/responses/TooManyRequests' }
 
   /auth/login:
@@ -83,6 +150,11 @@ paths:
         '400': { $ref: '#/components/responses/ValidationError' }
         '401':
           description: '`INVALID_CREDENTIALS` (same answer for unknown email and wrong password)'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '403':
+          description: '`EMAIL_NOT_VERIFIED` (only returned when the password is correct)'
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
@@ -175,6 +247,22 @@ components:
       schema: { type: string, enum: [mobile] }
 
   responses:
+    CheckEmail:
+      description: Accepted. Identical whether or not an email was actually sent.
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              data:
+                type: object
+                properties:
+                  status: { type: string, const: check_email }
+    InvalidToken:
+      description: '`INVALID_OR_EXPIRED_TOKEN`, or `VALIDATION_ERROR` for a malformed token/password'
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
     ValidationError:
       description: '`VALIDATION_ERROR` with `details: [{ field, code }]`'
       content:
@@ -210,6 +298,20 @@ components:
         email: { type: string, format: email, maxLength: 254 }
         password: { type: string, minLength: 12, maxLength: 128 }
         preferredLanguage: { type: string, enum: [fr, ar], default: fr }
+
+    TokenRequest:
+      type: object
+      additionalProperties: false
+      required: [token]
+      properties:
+        token: { type: string, pattern: '^[\w-]{43}$' }
+
+    EmailRequest:
+      type: object
+      additionalProperties: false
+      required: [email]
+      properties:
+        email: { type: string, format: email }
 
     LoginRequest:
       type: object

@@ -6,7 +6,7 @@ Tigmi is a bilingual (French / Arabic with full RTL) family home management plat
 budgets, bills, shopping lists, tasks, calendar and home inventory, shared by a household.
 It has a responsive web app, an Expo mobile app (Phase 8) and one shared REST API.
 
-**Status:** Phase 2 — Authentication (API: register, login, sessions, logout). See [docs/roadmap.md](docs/roadmap.md).
+**Status:** Phase 2 — Authentication (API: register with email verification, login, sessions, logout, password reset). See [docs/roadmap.md](docs/roadmap.md).
 
 ## Stack
 
@@ -61,27 +61,27 @@ npm run dev           # API on http://localhost:4000, web on http://localhost:51
 Open http://localhost:5180 — the **État du système** card should show **API: Opérationnelle** and
 **Base de données: Connectée**. Stop with `Ctrl+C`.
 
-| URL                                 | What                                   |
-| ----------------------------------- | -------------------------------------- |
-| http://localhost:5180               | Web app (calls the API through `/api`) |
-| http://localhost:4000/api/v1/health | API health check (JSON)                |
-| http://localhost:8025               | Mailpit inbox (emails sent in dev)     |
+| URL                                 | What                                                                  |
+| ----------------------------------- | --------------------------------------------------------------------- |
+| http://localhost:5180               | Web app (calls the API through `/api`)                                |
+| http://localhost:4000/api/v1/health | API health check (JSON)                                               |
+| http://localhost:8025               | Mailpit inbox: every email the API sends in dev (verification, reset) |
 
 ## Scripts
 
-| Command                    | What it does                                                                         |
-| -------------------------- | ------------------------------------------------------------------------------------ |
-| `npm run dev`              | API + web with auto-reload                                                           |
-| `npm run services:up/down` | Start / stop Docker services (data is kept in a Docker volume)                       |
-| `npm run db:migrate`       | Create + apply a migration after editing `schema.prisma`, then regenerate the client |
-| `npm run db:deploy`        | Apply existing migrations                                                            |
-| `npm run lint`             | ESLint                                                                               |
-| `npm run format`           | Prettier (write); `format:check` to only check                                       |
-| `npm test`                 | API unit + integration tests (real `tigmi_test` DB) + web tests                      |
-| `npm run test:e2e`         | Playwright: real API + web, desktop 1366px and phone 390px                           |
-| `npm run build`            | Production build of the web app                                                      |
-| `npm run audit`            | Blocking audit of production dependencies; `audit:all` = all                         |
-| `npm run check`            | lint + format + tests + build + audit (run before every commit)                      |
+| Command                          | What it does                                                                         |
+| -------------------------------- | ------------------------------------------------------------------------------------ |
+| `npm run dev`                    | API + web with auto-reload                                                           |
+| `npm run services:up/down`       | Start / stop Docker services (data is kept in a Docker volume)                       |
+| `npm run db:migrate -- --name x` | Create + apply a migration after editing `schema.prisma`, then regenerate the client |
+| `npm run db:deploy`              | Apply existing migrations                                                            |
+| `npm run lint`                   | ESLint                                                                               |
+| `npm run format`                 | Prettier (write); `format:check` to only check                                       |
+| `npm test`                       | API unit + integration tests (real `tigmi_test` DB) + web tests                      |
+| `npm run test:e2e`               | Playwright: real API + web, desktop 1366px and phone 390px                           |
+| `npm run build`                  | Production build of the web app                                                      |
+| `npm run audit`                  | Blocking audit of production dependencies; `audit:all` = all                         |
+| `npm run check`                  | lint + format + tests + build + audit (run before every commit)                      |
 
 ## Project layout
 

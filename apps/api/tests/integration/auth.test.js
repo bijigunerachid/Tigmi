@@ -2,16 +2,23 @@ import request from 'supertest';
 import { hashToken } from '../../src/modules/auth/tokens.js';
 import {
   createTestContext,
+  emailsTo,
   parseSetCookies,
   resetDatabase,
+  tokenFromEmail,
   validUser,
 } from '../helpers/test-app.js';
 
-const { app, prisma } = createTestContext({
+const ctx = createTestContext({
   security: { maxFailedLogins: 3, lockoutSeconds: 60, refreshReuseGraceSeconds: 2 },
 });
+const { app, prisma } = ctx;
 
-beforeEach(() => resetDatabase(prisma));
+beforeEach(async () => {
+  await ctx.mail.flush();
+  ctx.outbox.length = 0;
+  await resetDatabase(prisma);
+});
 afterAll(() => prisma.$disconnect());
 
 const register = (body = validUser(), headers = {}) =>
@@ -19,10 +26,23 @@ const register = (body = validUser(), headers = {}) =>
 const login = (body, headers = {}) =>
   request(app).post('/api/v1/auth/login').set(headers).send(body);
 
-/** Registers via the web flow and returns tokens + cookies. */
+/** Registers, confirms the email through the real verification link, returns the user. */
+async function registerVerified(overrides) {
+  const user = validUser(overrides);
+  expect((await register(user)).status).toBe(202);
+  const [email] = await emailsTo(ctx, user.email.trim().toLowerCase());
+  const res = await request(app)
+    .post('/api/v1/auth/verify-email')
+    .send({ token: tokenFromEmail(email) });
+  expect(res.status).toBe(204);
+  return user;
+}
+
+/** Verified user signed in through the web flow: returns tokens + cookies. */
 async function registerWeb(overrides) {
-  const res = await register(validUser(overrides));
-  expect(res.status).toBe(201);
+  const user = await registerVerified(overrides);
+  const res = await login({ email: user.email, password: user.password });
+  expect(res.status).toBe(200);
   const cookies = parseSetCookies(res);
   return {
     res,
@@ -49,53 +69,34 @@ const ageRefreshToken = (token, seconds) =>
   });
 
 describe('POST /auth/register', () => {
-  it('creates the user, a session, and sets secure cookies (web)', async () => {
-    const { res, refreshToken } = await registerWeb({ email: '  Amina@Example.COM ' });
+  it('creates an unverified user and answers 202 without signing in', async () => {
+    const res = await register(validUser({ email: '  Amina@Example.COM ' }));
 
-    expect(res.body.data.user).toEqual({
-      id: expect.any(String),
-      fullName: 'Amina Benali',
-      email: 'amina@example.com',
-      avatarUrl: null,
-      preferredLanguage: 'fr',
-      emailVerified: false,
-      createdAt: expect.any(String),
-    });
-    expect(res.body.data.accessToken).toEqual(expect.any(String));
-    expect(res.body.data.csrfToken).toEqual(expect.any(String));
-    expect(res.body.data.refreshToken).toBeUndefined(); // web: never in the body
+    expect(res.status).toBe(202);
+    expect(res.body).toEqual({ data: { status: 'check_email' } });
+    expect(res.headers['set-cookie']).toBeUndefined();
     expect(res.headers['cache-control']).toBe('no-store');
 
-    const cookies = parseSetCookies(res);
-    expect(cookies.tigmi_rt.attributes).toMatchObject({
-      httponly: true,
-      samesite: 'Strict',
-      path: '/api/v1/auth',
-    });
-    expect(cookies.tigmi_csrf.attributes.httponly).toBeUndefined();
-    expect(cookies.tigmi_csrf.attributes).toMatchObject({ samesite: 'Strict', path: '/' });
-
     const user = await prisma.user.findUnique({ where: { email: 'amina@example.com' } });
+    expect(user.emailVerifiedAt).toBeNull();
     expect(user.passwordHash).toMatch(/^\$argon2id\$v=19\$m=19456,p=1,t=2\$/);
-    const tokens = await prisma.refreshToken.findMany();
-    expect(tokens).toHaveLength(1);
-    expect(tokens[0].tokenHash).toBe(hashToken(refreshToken)); // only the hash is stored
+    expect(await prisma.session.count()).toBe(0);
     expect(await prisma.auditLog.count({ where: { action: 'auth.register' } })).toBe(1);
   });
 
-  it('returns the refresh token in the body and sets no cookie for mobile clients', async () => {
-    const res = await register(validUser(), { 'X-Client-Type': 'mobile' });
-    expect(res.status).toBe(201);
-    expect(res.body.data.refreshToken).toEqual(expect.any(String));
-    expect(res.body.data.sessionExpiresAt).toEqual(expect.any(String));
-    expect(res.headers['set-cookie']).toBeUndefined();
-  });
+  it('gives exactly the same answer for an email that already has an account', async () => {
+    await registerVerified();
+    const before = await prisma.user.findUnique({ where: { email: 'amina@example.com' } });
 
-  it('rejects a duplicate email regardless of case (409)', async () => {
-    await registerWeb();
-    const res = await register(validUser({ email: 'AMINA@example.com' }));
-    expect(res.status).toBe(409);
-    expect(res.body.error.code).toBe('EMAIL_TAKEN');
+    const res = await register(
+      validUser({ email: 'AMINA@example.com', password: 'another passphrase' }),
+    );
+
+    expect(res.status).toBe(202);
+    expect(res.body).toEqual({ data: { status: 'check_email' } });
+    const after = await prisma.user.findUnique({ where: { email: 'amina@example.com' } });
+    expect(after.passwordHash).toBe(before.passwordHash); // the existing account is untouched
+    expect(await prisma.user.count()).toBe(1);
   });
 
   it('returns field-level validation codes', async () => {
@@ -122,6 +123,62 @@ describe('POST /auth/register', () => {
     const res = await register(validUser({ email, password: email }));
     expect(res.status).toBe(400);
     expect(res.body.error.details).toEqual([{ field: 'password', code: 'password_equals_email' }]);
+  });
+});
+
+describe('POST /auth/login — web and mobile sessions', () => {
+  it('signs in a verified user with secure cookies (web)', async () => {
+    const { res, refreshToken } = await registerWeb();
+
+    expect(res.body.data.user).toEqual({
+      id: expect.any(String),
+      fullName: 'Amina Benali',
+      email: 'amina@example.com',
+      avatarUrl: null,
+      preferredLanguage: 'fr',
+      emailVerified: true,
+      createdAt: expect.any(String),
+    });
+    expect(res.body.data.csrfToken).toEqual(expect.any(String));
+    expect(res.body.data.refreshToken).toBeUndefined(); // web: never in the body
+
+    const cookies = parseSetCookies(res);
+    expect(cookies.tigmi_rt.attributes).toMatchObject({
+      httponly: true,
+      samesite: 'Strict',
+      path: '/api/v1/auth',
+    });
+    expect(cookies.tigmi_csrf.attributes.httponly).toBeUndefined();
+    expect(cookies.tigmi_csrf.attributes).toMatchObject({ samesite: 'Strict', path: '/' });
+
+    const tokens = await prisma.refreshToken.findMany();
+    expect(tokens).toHaveLength(1);
+    expect(tokens[0].tokenHash).toBe(hashToken(refreshToken)); // only the hash is stored
+  });
+
+  it('returns the refresh token in the body and sets no cookie for mobile clients', async () => {
+    const user = await registerVerified();
+    const res = await login(
+      { email: user.email, password: user.password },
+      { 'X-Client-Type': 'mobile' },
+    );
+    expect(res.status).toBe(200);
+    expect(res.body.data.refreshToken).toEqual(expect.any(String));
+    expect(res.body.data.sessionExpiresAt).toEqual(expect.any(String));
+    expect(res.headers['set-cookie']).toBeUndefined();
+  });
+
+  it('refuses an unverified account, but only once the password is correct', async () => {
+    await register(validUser());
+
+    const wrong = await login({ email: 'amina@example.com', password: 'wrong password!' });
+    expect(wrong.status).toBe(401);
+    expect(wrong.body.error.code).toBe('INVALID_CREDENTIALS');
+
+    const right = await login({ email: 'amina@example.com', password: validUser().password });
+    expect(right.status).toBe(403);
+    expect(right.body.error.code).toBe('EMAIL_NOT_VERIFIED');
+    expect(await prisma.session.count()).toBe(0);
   });
 });
 
@@ -274,7 +331,11 @@ describe('POST /auth/refresh', () => {
   });
 
   it('works for mobile clients with the token in the body (no CSRF needed)', async () => {
-    const reg = await register(validUser(), { 'X-Client-Type': 'mobile' });
+    const user = await registerVerified();
+    const reg = await login(
+      { email: user.email, password: user.password },
+      { 'X-Client-Type': 'mobile' },
+    );
     const res = await request(app)
       .post('/api/v1/auth/refresh')
       .send({ refreshToken: reg.body.data.refreshToken });

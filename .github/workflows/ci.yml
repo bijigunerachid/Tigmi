@@ -32,7 +32,18 @@ jobs:
           --health-cmd "pg_isready -U tigmi -d tigmi_test"
           --health-interval 5s --health-timeout 5s --health-retries 10
 
+      mailpit:
+        image: axllent/mailpit:v1.31.6
+        ports:
+          - 1025:1025
+          - 8025:8025
+
     env:
+      # Email goes to the Mailpit service above (tests read it back through its API).
+      APP_URL: http://localhost:5180
+      SMTP_HOST: localhost
+      SMTP_PORT: 1025
+      MAIL_FROM: Tigmi <no-reply@tigmi.local>
       # CI-only throwaway credentials for the disposable service container above.
       TEST_DATABASE_URL: postgresql://tigmi:ci-only-password@localhost:5432/tigmi_test
       DATABASE_URL: postgresql://tigmi:ci-only-password@localhost:5432/tigmi_test

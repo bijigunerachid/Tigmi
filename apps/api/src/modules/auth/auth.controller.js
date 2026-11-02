@@ -7,6 +7,9 @@ const isMobileClient = (req) => req.get('x-client-type') === 'mobile';
 
 const clientInfo = (req) => ({ ipAddress: req.ip, userAgent: req.get('user-agent') });
 
+/** Same body for every "we may have sent you an email" answer, so responses reveal nothing. */
+const CHECK_EMAIL = Object.freeze({ data: { status: 'check_email' } });
+
 export function createAuthController({ authService, authCookies, cookieNames }) {
   /**
    * Web: refresh token goes into the HttpOnly cookie and never appears in the body.
@@ -37,8 +40,30 @@ export function createAuthController({ authService, authCookies, cookieNames }) 
 
   return {
     async register(req, res) {
-      const result = await authService.register(req.body, clientInfo(req));
-      sendAuthResult(req, res, 201, result, { mobile: isMobileClient(req) });
+      await authService.register(req.body, clientInfo(req));
+      // Identical answer whether the email was new or already registered.
+      res.status(202).json(CHECK_EMAIL);
+    },
+
+    async verifyEmail(req, res) {
+      await authService.verifyEmail(req.body.token, clientInfo(req));
+      res.status(204).end();
+    },
+
+    async resendVerification(req, res) {
+      await authService.resendVerification(req.body.email);
+      res.status(202).json(CHECK_EMAIL);
+    },
+
+    async forgotPassword(req, res) {
+      await authService.forgotPassword(req.body.email, clientInfo(req));
+      res.status(202).json(CHECK_EMAIL);
+    },
+
+    async resetPassword(req, res) {
+      await authService.resetPassword(req.body, clientInfo(req));
+      authCookies.clear(res); // every session was revoked
+      res.status(204).end();
     },
 
     async login(req, res) {

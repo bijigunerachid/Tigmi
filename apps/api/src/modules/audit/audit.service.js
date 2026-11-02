@@ -1,6 +1,10 @@
 /** Stable action names. Add new ones here so they stay searchable and consistent. */
 export const AUDIT_ACTIONS = Object.freeze({
   REGISTER: 'auth.register',
+  REGISTER_EXISTING_EMAIL: 'auth.register_existing_email',
+  EMAIL_VERIFIED: 'auth.email_verified',
+  PASSWORD_RESET_REQUESTED: 'auth.password_reset_requested',
+  PASSWORD_RESET: 'auth.password_reset',
   LOGIN: 'auth.login',
   LOGIN_FAILED: 'auth.login_failed',
   ACCOUNT_LOCKED: 'auth.account_locked',

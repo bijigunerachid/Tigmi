@@ -29,6 +29,16 @@ const envSchema = z
     JWT_ACCESS_SECRET: z.string().min(43, 'must be at least 32 random bytes (43 base64 chars)'),
     // Cookies get the Secure flag (HTTPS only). Defaults to true in production.
     COOKIE_SECURE: booleanString.optional(),
+    // Public URL of the web app, used to build links in emails (no trailing slash).
+    APP_URL: z.url().transform((value) => value.replace(/\/+$/, '')),
+    // Outgoing email (Mailpit locally: localhost:1025, no auth, no TLS).
+    SMTP_HOST: z.string().min(1),
+    SMTP_PORT: z.coerce.number().int().min(1).max(65535),
+    // true = TLS from the first byte (port 465). false = STARTTLS upgrade when offered (587/25).
+    SMTP_SECURE: booleanString.default(false),
+    SMTP_USER: z.string().optional(),
+    SMTP_PASSWORD: z.string().optional(),
+    MAIL_FROM: z.string().min(3),
   })
   .transform((env) => ({
     ...env,
@@ -48,6 +58,20 @@ const envSchema = z
         code: 'custom',
         path: ['JWT_ACCESS_SECRET'],
         message: 'uses the example value; generate a real secret in production',
+      });
+    }
+    if (!env.APP_URL.startsWith('https://')) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['APP_URL'],
+        message: 'must be https:// in production',
+      });
+    }
+    if (!env.SMTP_USER || !env.SMTP_PASSWORD) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['SMTP_USER'],
+        message: 'SMTP credentials are required in production',
       });
     }
     if (!env.COOKIE_SECURE) {

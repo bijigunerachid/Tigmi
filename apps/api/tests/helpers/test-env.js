@@ -28,6 +28,10 @@ export function createTestEnv(overrides = {}) {
     LOG_LEVEL: 'silent',
     // Test-only signing key: never used outside the test process.
     JWT_ACCESS_SECRET: 'test-only-secret-'.padEnd(64, 'x'),
+    APP_URL: 'http://localhost:5180',
+    SMTP_HOST: process.env.SMTP_HOST ?? 'localhost',
+    SMTP_PORT: process.env.SMTP_PORT ?? '1025',
+    MAIL_FROM: 'Tigmi <no-reply@tigmi.local>',
     ...overrides,
   });
 }

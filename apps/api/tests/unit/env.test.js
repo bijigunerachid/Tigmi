@@ -5,6 +5,10 @@ const valid = {
   DATABASE_URL: 'postgresql://tigmi:secret123@localhost:5432/tigmi',
   CORS_ORIGINS: 'http://localhost:5180, http://localhost:5181',
   JWT_ACCESS_SECRET: 'a'.repeat(43),
+  APP_URL: 'http://localhost:5180/',
+  SMTP_HOST: 'localhost',
+  SMTP_PORT: '1025',
+  MAIL_FROM: 'Tigmi <no-reply@tigmi.local>',
 };
 
 describe('loadEnv', () => {
@@ -14,6 +18,8 @@ describe('loadEnv', () => {
     expect(env.LOG_LEVEL).toBe('info');
     expect(env.TRUST_PROXY_HOPS).toBe(0);
     expect(env.COOKIE_SECURE).toBe(false);
+    expect(env.SMTP_SECURE).toBe(false);
+    expect(env.APP_URL).toBe('http://localhost:5180'); // trailing slash removed
     expect(env.CORS_ORIGINS).toEqual(['http://localhost:5180', 'http://localhost:5181']);
   });
 
@@ -57,10 +63,22 @@ describe('loadEnv', () => {
       ...valid,
       NODE_ENV: 'production',
       CORS_ORIGINS: 'https://app.tigmi.example',
+      APP_URL: 'https://app.tigmi.example',
+      SMTP_USER: 'mailer',
+      SMTP_PASSWORD: 'smtp-secret',
     };
 
     it('accepts https origins and a real password, and defaults COOKIE_SECURE to true', () => {
       expect(loadEnv(production).COOKIE_SECURE).toBe(true);
+    });
+
+    it('requires an https APP_URL and SMTP credentials', () => {
+      expect(() => loadEnv({ ...production, APP_URL: 'http://app.tigmi.example' })).toThrow(
+        /APP_URL: must be https/,
+      );
+      expect(() => loadEnv({ ...production, SMTP_PASSWORD: '' })).toThrow(
+        /SMTP credentials are required/,
+      );
     });
 
     it('refuses insecure cookies', () => {
