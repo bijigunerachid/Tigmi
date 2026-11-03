@@ -6,7 +6,7 @@ Tigmi is a bilingual (French / Arabic with full RTL) family home management plat
 budgets, bills, shopping lists, tasks, calendar and home inventory, shared by a household.
 It has a responsive web app, an Expo mobile app (Phase 8) and one shared REST API.
 
-**Status:** Phase 2 — Authentication & households (API: accounts with email verification, sessions, password reset, households with roles, members and email invitations). See [docs/roadmap.md](docs/roadmap.md).
+**Status:** Phase 2 — Authentication & households (API: accounts with email verification, sessions, password reset, households with roles, members and email invitations) and the first web screens (French). See [docs/roadmap.md](docs/roadmap.md).
 
 ## Stack
 
@@ -58,8 +58,12 @@ npm run services:up   # if Docker services are not running
 npm run dev           # API on http://localhost:4000, web on http://localhost:5180
 ```
 
-Open http://localhost:5180 — the **État du système** card should show **API: Opérationnelle** and
-**Base de données: Connectée**. Stop with `Ctrl+C`.
+Open http://localhost:5180 — you land on **Connexion**. Click **Créer un compte**, then open
+http://localhost:8025 (Mailpit) to find the confirmation email and click its link. Sign in, create
+a household and invite someone (their invitation email also appears in Mailpit).
+http://localhost:5180/status shows whether the API and database are reachable. Stop with `Ctrl+C`.
+
+> Stop `npm run dev` before running `npm ci`: on Windows the running dev server locks native files.
 
 | URL                                 | What                                                                  |
 | ----------------------------------- | --------------------------------------------------------------------- |

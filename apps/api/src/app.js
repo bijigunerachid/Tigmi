@@ -4,7 +4,7 @@ import cors from 'cors';
 import express from 'express';
 import helmet from 'helmet';
 import { pinoHttp } from 'pino-http';
-import { createSecurityConfig } from './config/security.js';
+import { createSecurityConfig, scaleRateLimits } from './config/security.js';
 import { createAuthenticate } from './middleware/authenticate.js';
 import { createHouseholdAccess } from './middleware/household-access.js';
 import { errorHandler, notFoundHandler } from './middleware/error-handler.js';
@@ -26,7 +26,7 @@ const REQUEST_ID_PATTERN = /^[\w-]{8,64}$/;
  * `mail` defaults to SMTP from env; tests pass a mail service with an in-memory transport.
  */
 export function createApp({ env, prisma, logger, security, mail }) {
-  const config = createSecurityConfig(security);
+  const config = scaleRateLimits(createSecurityConfig(security), env.RATE_LIMIT_SCALE);
   const app = express();
 
   app.disable('x-powered-by');

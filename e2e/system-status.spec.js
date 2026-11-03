@@ -5,10 +5,10 @@ test.describe('System status page', () => {
   test('shows the API and database as healthy (real API + real database)', async ({
     page,
   }, testInfo) => {
-    await page.goto('/');
+    await page.goto('/status');
 
     await expect(page).toHaveTitle('Tigmi');
-    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Tigmi.');
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('État du système');
     await expect(page.getByText('Opérationnelle')).toBeVisible();
     await expect(page.getByText('Connectée')).toBeVisible();
     await expect(page.locator('html')).toHaveAttribute('lang', 'fr');
@@ -26,7 +26,7 @@ test.describe('System status page', () => {
   });
 
   test('has no detectable accessibility violations', async ({ page }) => {
-    await page.goto('/');
+    await page.goto('/status');
     await expect(page.getByText('Connectée')).toBeVisible();
 
     const results = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa']).analyze();
@@ -39,7 +39,7 @@ test.describe('System status page', () => {
       failNext ? route.abort('connectionrefused') : route.continue(),
     );
 
-    await page.goto('/');
+    await page.goto('/status');
     await expect(page.getByRole('alert')).toContainText('Injoignable');
 
     failNext = false;

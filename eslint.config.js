@@ -23,6 +23,8 @@ export default [
       eqeqeq: ['error', 'always'],
       'no-console': ['warn', { allow: ['warn', 'error'] }],
       'prefer-const': 'error',
+      // A variable hiding another of the same name caused a confusing test bug in Phase 2.
+      'no-shadow': ['error', { builtinGlobals: false }],
     },
   },
 

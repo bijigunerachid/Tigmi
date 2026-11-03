@@ -237,12 +237,12 @@ describe('POST /auth/login', () => {
     const lines = [];
     const { default: pino } = await import('pino');
     const logger = pino({ level: 'trace' }, { write: (line) => lines.push(line) });
-    const ctx = createTestContext({ logger });
+    const logged = createTestContext({ logger });
 
-    await request(ctx.app)
+    await request(logged.app)
       .post('/api/v1/auth/login')
       .send({ email: 'amina@example.com', password: 'secret-should-not-leak' });
-    await ctx.prisma.$disconnect();
+    await logged.prisma.$disconnect();
 
     expect(lines.length).toBeGreaterThan(0);
     expect(lines.join('\n')).not.toContain('secret-should-not-leak');

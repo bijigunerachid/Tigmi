@@ -74,6 +74,18 @@ and every accepted risk with a review date.
 | Cross-household tampering                | Invitation ids are always looked up together with the household id from the URL (`INVITATION_NOT_FOUND`).                                                                                                |
 | Forensics                                | `invitation.sent/revoked/accepted` audited (address, role, actor).                                                                                                                                       |
 
+## Web client (Phase 2 — `feature/web-auth`)
+
+| Threat                               | Defence                                                                                                                                                                                                                  |
+| ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Token theft through XSS              | Access token only in memory; refresh token only in the HttpOnly cookie; nothing secret in localStorage. React escapes all rendered text.                                                                                 |
+| Tokens leaking from emailed links    | Tokens arrive in the URL fragment and are removed from the address bar on first read (`history.replaceState`). The invitation token is kept in that tab's **sessionStorage** only and cleared after use or when invalid. |
+| Open redirect after sign-in          | `?next=` accepts only in-app paths (not `//host`, backslash tricks or absolute URLs). Tested.                                                                                                                            |
+| Showing another user's data          | Sign-out (or a session ended elsewhere) clears the whole query cache; other tabs are signed out too.                                                                                                                     |
+| False token-theft alarms             | Single-flight refresh + `409` retry, so legitimate parallel requests never replay a rotated refresh token.                                                                                                               |
+| Double use of single-use links       | Verification runs once even under React StrictMode (guarded effect); submit buttons are disabled while sending.                                                                                                          |
+| Test relaxations reaching production | `RATE_LIMIT_SCALE` (used only by the Playwright API server) must be 1 in production; startup fails otherwise. Tested.                                                                                                    |
+
 ## Planned
 
 - **feature/settings:** list/revoke sessions per device, "sign out everywhere", change password.

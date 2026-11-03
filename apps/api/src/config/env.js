@@ -39,6 +39,9 @@ const envSchema = z
     SMTP_USER: z.string().optional(),
     SMTP_PASSWORD: z.string().optional(),
     MAIL_FROM: z.string().min(3),
+    // Multiplies every rate limit. Only for automated end-to-end tests, which sign up many
+    // people from one IP. Production refuses anything but 1.
+    RATE_LIMIT_SCALE: z.coerce.number().int().min(1).max(1000).default(1),
   })
   .transform((env) => ({
     ...env,
@@ -72,6 +75,13 @@ const envSchema = z
         code: 'custom',
         path: ['SMTP_USER'],
         message: 'SMTP credentials are required in production',
+      });
+    }
+    if (env.RATE_LIMIT_SCALE !== 1) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['RATE_LIMIT_SCALE'],
+        message: 'must be 1 in production',
       });
     }
     if (!env.COOKIE_SECURE) {

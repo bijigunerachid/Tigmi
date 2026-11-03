@@ -41,6 +41,8 @@ export default defineConfig({
         DATABASE_URL: process.env.TEST_DATABASE_URL ?? '',
         CORS_ORIGINS: `http://localhost:${WEB_PORT}`,
         LOG_LEVEL: 'warn',
+        // The suite signs up many people from one IP; real limits are covered by API tests.
+        RATE_LIMIT_SCALE: '100',
       },
     },
     {

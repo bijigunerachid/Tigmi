@@ -1,7 +1,9 @@
 import { useQuery } from '@tanstack/react-query';
+import { useTranslation } from 'react-i18next';
+import { Button } from '../../components/ui/Button.jsx';
+import { Card } from '../../components/ui/Card.jsx';
 import { fetchHealth } from './health-api.js';
 
-// French strings for now; they move into i18next (fr/ar) in Phase 3.
 const TONES = {
   ok: { dot: 'bg-success', text: 'text-success' },
   warn: { dot: 'bg-warning', text: 'text-warning' },
@@ -20,7 +22,9 @@ function StatusRow({ label, value, tone }) {
   );
 }
 
+/** Public page showing whether the API and database are reachable (useful for support). */
 export function SystemStatus() {
+  const { t } = useTranslation();
   const { data, isPending, isError, isFetching, refetch } = useQuery({
     queryKey: ['health'],
     queryFn: ({ signal }) => fetchHealth({ signal }),
@@ -29,18 +33,15 @@ export function SystemStatus() {
   });
 
   return (
-    <section
-      aria-labelledby="system-status-title"
-      className="w-full max-w-md rounded-2xl border border-white/5 bg-surface p-6 shadow-xl shadow-black/30"
-    >
-      <h2 id="system-status-title" className="text-lg font-semibold">
-        État du système
-      </h2>
+    <Card as="section" aria-labelledby="system-status-title" className="w-full">
+      <h1 id="system-status-title" className="text-lg font-semibold">
+        {t('status.title')}
+      </h1>
 
       <div aria-live="polite" aria-busy={isPending} className="mt-4">
         {isPending && (
           <div role="status" className="space-y-3">
-            <span className="sr-only">Vérification en cours…</span>
+            <span className="sr-only">{t('status.checking')}</span>
             <div className="h-5 animate-pulse rounded bg-white/5" />
             <div className="h-5 animate-pulse rounded bg-white/5" />
           </div>
@@ -49,20 +50,18 @@ export function SystemStatus() {
         {isError && (
           <div role="alert" className="space-y-4">
             <dl className="divide-y divide-white/5">
-              <StatusRow label="API" value="Injoignable" tone="error" />
+              <StatusRow label={t('status.api')} value={t('status.unreachable')} tone="error" />
             </dl>
-            <p className="text-sm text-ink-muted">
-              Le serveur ne répond pas. Vérifiez qu’il est démarré, puis réessayez.
-            </p>
+            <p className="text-sm text-ink-muted">{t('status.unreachableHelp')}</p>
           </div>
         )}
 
         {data && (
           <dl className="divide-y divide-white/5">
-            <StatusRow label="API" value="Opérationnelle" tone="ok" />
+            <StatusRow label={t('status.api')} value={t('status.operational')} tone="ok" />
             <StatusRow
-              label="Base de données"
-              value={data.database === 'up' ? 'Connectée' : 'Indisponible'}
+              label={t('status.database')}
+              value={data.database === 'up' ? t('status.connected') : t('status.unavailable')}
               tone={data.database === 'up' ? 'ok' : 'warn'}
             />
           </dl>
@@ -70,15 +69,14 @@ export function SystemStatus() {
       </div>
 
       {!isPending && (
-        <button
-          type="button"
-          onClick={() => refetch()}
-          disabled={isFetching}
-          className="mt-6 inline-flex min-h-11 w-full items-center justify-center rounded-xl bg-brand px-4 font-medium text-white transition-colors hover:bg-brand/90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-60"
-        >
-          {isFetching ? 'Vérification…' : isError ? 'Réessayer' : 'Actualiser'}
-        </button>
+        <Button className="mt-6 w-full" onClick={() => refetch()} disabled={isFetching}>
+          {isFetching
+            ? t('status.checkingShort')
+            : isError
+              ? t('common.retry')
+              : t('status.refresh')}
+        </Button>
       )}
-    </section>
+    </Card>
   );
 }
