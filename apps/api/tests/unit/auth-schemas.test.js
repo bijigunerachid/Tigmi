@@ -29,6 +29,22 @@ describe('registerSchema (shared with web and mobile)', () => {
     ).not.toThrow();
   });
 
+  it.each(['Pierre Cappuccino', 'Claire {Chef}', 'Zoë Ćorić-Pérez', "N'Diaye Ibn Abdellah"])(
+    'accepts ordinary names with any letters or punctuation: %s',
+    (fullName) => {
+      expect(registerSchema.safeParse({ ...base, fullName }).success).toBe(true);
+    },
+  );
+
+  it.each(['Amina\r\nBcc: evil@example.com', 'Amina\u0000', 'Tab\tName'])(
+    'rejects names containing control characters: %j',
+    (fullName) => {
+      expect(codes(registerSchema.safeParse({ ...base, fullName }))).toEqual([
+        ['fullName', 'invalid_characters'],
+      ]);
+    },
+  );
+
   it('enforces 12–128 characters for passwords', () => {
     expect(codes(registerSchema.safeParse({ ...base, password: 'x'.repeat(11) }))).toEqual([
       ['password', 'password_too_short'],

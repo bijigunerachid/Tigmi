@@ -50,6 +50,7 @@ export function createTestContext({ security = {}, logger } = {}) {
         refresh: HIGH,
         emailRequest: HIGH,
         tokenSubmit: HIGH,
+        invite: HIGH,
         ...security.rateLimits,
       },
     },

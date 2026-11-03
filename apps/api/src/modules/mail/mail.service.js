@@ -28,8 +28,8 @@ export function createSmtpTransport(env) {
 export function createMailService({ transport, from, appUrl, logger }) {
   const pending = new Set();
 
-  function deliver(to, template, { language, name, actionUrl }) {
-    const message = renderEmail(template, { language, name, actionUrl });
+  function deliver(to, template, { language, name, actionUrl, vars }) {
+    const message = renderEmail(template, { language, name, actionUrl, vars });
     const promise = transport
       .sendMail({ from, to, subject: message.subject, text: message.text, html: message.html })
       .catch((err) => logger.error({ err, template }, 'Email delivery failed'))
@@ -62,6 +62,15 @@ export function createMailService({ transport, from, appUrl, logger }) {
       deliver(user.email, 'passwordChanged', {
         ...forUser(user),
         actionUrl: `${appUrl}/forgot-password`,
+      });
+    },
+    /** `recipient` may have no account yet: then no name, and the inviter's language is used. */
+    sendInvitationEmail({ to, language, name, inviterName, householdName, role, token }) {
+      deliver(to, 'invitation', {
+        language,
+        name,
+        actionUrl: `${appUrl}/invitations/accept#token=${token}`,
+        vars: { inviterName, householdName, role },
       });
     },
     async flush() {

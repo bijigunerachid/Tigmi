@@ -16,6 +16,9 @@ export const DEFAULT_SECURITY_CONFIG = Object.freeze({
   passwordResetTtlSeconds: 60 * 60,
   /** At most one verification/reset email per account per minute (anti email-bombing). */
   emailCooldownSeconds: 60,
+  invitationTtlSeconds: 7 * 24 * 60 * 60,
+  /** Members + pending invitations per household (anti-abuse; generous for a family). */
+  maxHouseholdMembers: 50,
   rateLimits: {
     global: { windowSeconds: 60, limit: 300 },
     login: { windowSeconds: 15 * 60, limit: 10 },
@@ -23,6 +26,7 @@ export const DEFAULT_SECURITY_CONFIG = Object.freeze({
     refresh: { windowSeconds: 15 * 60, limit: 60 },
     emailRequest: { windowSeconds: 60 * 60, limit: 5 },
     tokenSubmit: { windowSeconds: 15 * 60, limit: 20 },
+    invite: { windowSeconds: 60 * 60, limit: 30 },
   },
   cookies: {
     refreshToken: 'tigmi_rt',

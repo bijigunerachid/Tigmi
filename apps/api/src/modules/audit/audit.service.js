@@ -16,6 +16,9 @@ export const AUDIT_ACTIONS = Object.freeze({
   MEMBER_ROLE_CHANGED: 'member.role_changed',
   MEMBER_REMOVED: 'member.removed',
   MEMBER_LEFT: 'member.left',
+  INVITATION_SENT: 'invitation.sent',
+  INVITATION_REVOKED: 'invitation.revoked',
+  INVITATION_ACCEPTED: 'invitation.accepted',
 });
 
 /**

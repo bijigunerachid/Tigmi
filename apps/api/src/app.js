@@ -6,6 +6,7 @@ import helmet from 'helmet';
 import { pinoHttp } from 'pino-http';
 import { createSecurityConfig } from './config/security.js';
 import { createAuthenticate } from './middleware/authenticate.js';
+import { createHouseholdAccess } from './middleware/household-access.js';
 import { errorHandler, notFoundHandler } from './middleware/error-handler.js';
 import { createRateLimiter } from './middleware/rate-limit.js';
 import { createAuditService } from './modules/audit/audit.service.js';
@@ -13,6 +14,7 @@ import { createAuthRouter } from './modules/auth/auth.routes.js';
 import { createAccessTokenSigner } from './modules/auth/tokens.js';
 import { createHealthRouter } from './modules/health/health.routes.js';
 import { createHouseholdsRouter } from './modules/households/households.routes.js';
+import { createInvitationRouters } from './modules/invitations/invitations.routes.js';
 import { createMailService, createSmtpTransport } from './modules/mail/mail.service.js';
 
 const REQUEST_ID_PATTERN = /^[\w-]{8,64}$/;
@@ -100,7 +102,26 @@ export function createApp({ env, prisma, logger, security, mail }) {
       mail: mailService,
     }),
   );
-  v1.use('/households', createHouseholdsRouter({ prisma, audit, authenticate }));
+  const can = createHouseholdAccess({ prisma });
+  const invitations = createInvitationRouters({
+    prisma,
+    audit,
+    mail: mailService,
+    config,
+    authenticate,
+    can,
+  });
+  v1.use(
+    '/households',
+    createHouseholdsRouter({
+      prisma,
+      audit,
+      authenticate,
+      can,
+      invitationsRouter: invitations.householdScoped,
+    }),
+  );
+  v1.use('/invitations', invitations.forInvitee);
   app.use('/api/v1', v1);
 
   app.use(notFoundHandler);

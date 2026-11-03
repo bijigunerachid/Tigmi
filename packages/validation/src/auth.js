@@ -21,11 +21,15 @@ export const passwordSchema = z
   .min(PASSWORD_MIN_LENGTH, { error: 'password_too_short' })
   .max(PASSWORD_MAX_LENGTH, { error: 'password_too_long' });
 
+/** Rejects control characters (newlines, tabs, NUL…): names end up in emails and headers. */
+export const NO_CONTROL_CHARS = /^[^\p{Cc}]*$/u;
+
 export const fullNameSchema = z
   .string({ error: 'required' })
   .trim()
   .min(2, { error: 'too_short' })
-  .max(100, { error: 'too_long' });
+  .max(100, { error: 'too_long' })
+  .regex(NO_CONTROL_CHARS, { error: 'invalid_characters' });
 
 export const registerSchema = z
   .object({

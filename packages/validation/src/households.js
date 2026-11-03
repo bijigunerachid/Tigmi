@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { NO_CONTROL_CHARS, emailSchema, emailTokenSchema } from './auth.js';
 
 export const HOUSEHOLD_ROLES = ['OWNER', 'ADMIN', 'MEMBER'];
 
@@ -35,7 +36,8 @@ const householdName = z
   .string({ error: 'required' })
   .trim()
   .min(2, { error: 'too_short' })
-  .max(100, { error: 'too_long' });
+  .max(100, { error: 'too_long' })
+  .regex(NO_CONTROL_CHARS, { error: 'invalid_characters' });
 
 // Empty text clears the description.
 const householdDescription = z
@@ -72,3 +74,16 @@ export const deleteHouseholdSchema = z
 export const updateMemberRoleSchema = z
   .object({ role: z.enum(HOUSEHOLD_ROLES, { error: 'invalid_role' }) })
   .strict();
+
+/** Roles that can be given by invitation. Owners are promoted after joining, never invited. */
+export const INVITABLE_ROLES = ['ADMIN', 'MEMBER'];
+
+export const createInvitationSchema = z
+  .object({
+    email: emailSchema,
+    role: z.enum(INVITABLE_ROLES, { error: 'invalid_role' }).default('MEMBER'),
+  })
+  .strict();
+
+/** Body of "preview" and "accept": the token from the emailed link. */
+export const invitationTokenSchema = z.object({ token: emailTokenSchema }).strict();

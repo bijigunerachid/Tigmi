@@ -1,6 +1,7 @@
 import { AUDIT_ACTIONS } from '../audit/audit.service.js';
 import { AppError, conflict, forbidden } from '../../utils/errors.js';
 import { householdNotFound } from '../../middleware/household-access.js';
+import { lockHousehold } from './household-lock.js';
 import { toPublicMember } from './households.serializer.js';
 import { PERMISSIONS, canManageMember, hasPermission } from './permissions.js';
 
@@ -14,14 +15,6 @@ const notAllowed = () => forbidden('FORBIDDEN', 'Your role does not allow this a
 const includeUser = {
   user: { select: { id: true, fullName: true, email: true, avatarUrl: true } },
 };
-
-/**
- * Locks the household row until the transaction ends. Concurrent role changes and removals in the
- * same household then run one after another, so "at least one owner" cannot be broken by two
- * owners demoting each other at the same instant.
- */
-const lockHousehold = (tx, householdId) =>
-  tx.$queryRaw`SELECT id FROM households WHERE id = ${householdId}::uuid FOR UPDATE`;
 
 export function createMembersService({ prisma, audit }) {
   /** Locks, then re-reads actor and target inside the transaction (no stale roles). */
