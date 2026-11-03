@@ -2,6 +2,8 @@ import { useEffect } from 'react';
 import { Outlet, createBrowserRouter, useLocation } from 'react-router';
 import { RouterProvider } from 'react-router/dom';
 import { useTranslation } from 'react-i18next';
+import { hasChosenLanguage, setLanguage } from '../lib/i18n.js';
+import { useAuth } from '../features/auth/AuthProvider.jsx';
 import { AppLayout } from '../components/layout/AppLayout.jsx';
 import { AuthLayout } from '../components/layout/AuthLayout.jsx';
 import { CheckEmailPage } from '../features/auth/CheckEmailPage.jsx';
@@ -30,6 +32,14 @@ function RouteAnnouncer() {
 /** Keeps <html lang/dir> and the title in sync with the language (Arabic → rtl in Phase 3). */
 function Root() {
   const { t, i18n } = useTranslation();
+  const { user } = useAuth();
+
+  // After sign-in, use the account's language unless this device already has an explicit choice.
+  useEffect(() => {
+    if (user?.preferredLanguage && !hasChosenLanguage()) {
+      setLanguage(user.preferredLanguage, { remember: false });
+    }
+  }, [user?.preferredLanguage]);
   useEffect(() => {
     document.documentElement.lang = i18n.language;
     document.documentElement.dir = i18n.dir(i18n.language);
@@ -67,6 +77,15 @@ export const routes = [
           { path: '*', element: <NotFoundPage /> },
         ],
       },
+      // Component gallery: development builds only (the import is dropped from production).
+      ...(import.meta.env.DEV
+        ? [
+            {
+              path: '/dev/ui',
+              lazy: () => import('../dev/UiGallery.jsx').then((m) => ({ Component: m.UiGallery })),
+            },
+          ]
+        : []),
       {
         element: <RequireAuth />,
         children: [

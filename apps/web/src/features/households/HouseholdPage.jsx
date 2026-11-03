@@ -8,12 +8,18 @@ import { useTranslation } from 'react-i18next';
 import { Link, useParams } from 'react-router';
 import { Alert } from '../../components/ui/Alert.jsx';
 import { Button } from '../../components/ui/Button.jsx';
-import { Card } from '../../components/ui/Card.jsx';
+import { Avatar } from '../../components/ui/Avatar.jsx';
+import { Badge } from '../../components/ui/Badge.jsx';
+import { Skeleton } from '../../components/ui/Skeleton.jsx';
+import { Card, CardHeader } from '../../components/ui/Card.jsx';
+import { ConfirmDialog } from '../../components/ui/Dialog.jsx';
+import { useToast } from '../../components/ui/Toast.jsx';
 import { SelectField } from '../../components/ui/SelectField.jsx';
-import { Spinner } from '../../components/ui/Spinner.jsx';
+import { LoadingSpinner } from '../../components/ui/LoadingSpinner.jsx';
 import { TextField } from '../../components/ui/TextField.jsx';
 import { applyApiError, fieldError } from '../../lib/forms.js';
-import { errorMessage } from '../../lib/i18n.js';
+import { errorMessage, intlLocale } from '../../lib/i18n.js';
+import { ROLE_TONES } from './roles.js';
 import { useAuth } from '../auth/AuthProvider.jsx';
 import {
   createInvitation,
@@ -34,20 +40,19 @@ function MembersList({ householdId }) {
 
   return (
     <Card as="section" aria-labelledby="members-title">
-      <h2 id="members-title" className="text-lg font-semibold">
-        {t('members.title')}
-      </h2>
-      {query.isPending && <Spinner label={t('common.loading')} />}
+      <CardHeader title={t('members.title')} titleId="members-title" />
+      {query.isPending && <LoadingSpinner label={t('common.loading')} />}
       {query.isError && (
         <Alert tone="error" className="mt-4">
           {t('members.loadError')}
         </Alert>
       )}
       {query.isSuccess && (
-        <ul className="mt-4 divide-y divide-white/5">
+        <ul className="divide-y divide-line">
           {query.data.map((member) => (
-            <li key={member.id} className="flex items-center justify-between gap-4 py-3">
-              <span className="min-w-0">
+            <li key={member.id} className="flex items-center gap-3 py-3">
+              <Avatar name={member.user.fullName} seed={member.user.id} />
+              <span className="min-w-0 flex-1">
                 <span className="block truncate font-medium">
                   {member.user.fullName}
                   {member.user.id === user?.id && (
@@ -55,12 +60,10 @@ function MembersList({ householdId }) {
                   )}
                 </span>
                 <span className="block truncate text-sm text-ink-muted" title={member.user.email}>
-                  {member.user.email}
+                  <bdi>{member.user.email}</bdi>
                 </span>
               </span>
-              <span className="shrink-0 rounded-full bg-white/5 px-3 py-1 text-sm">
-                {t(`roles.${member.role}`)}
-              </span>
+              <Badge tone={ROLE_TONES[member.role]}>{t(`roles.${member.role}`)}</Badge>
             </li>
           ))}
         </ul>
@@ -72,7 +75,7 @@ function MembersList({ householdId }) {
 function InviteForm({ household }) {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
-  const [sentTo, setSentTo] = useState(null);
+  const toast = useToast();
   const {
     register,
     handleSubmit,
@@ -90,10 +93,9 @@ function InviteForm({ household }) {
   );
 
   const onSubmit = async (values) => {
-    setSentTo(null);
     try {
       const invitation = await createInvitation(household.id, values);
-      setSentTo(invitation.email);
+      toast.success(t('invitations.sent', { email: invitation.email }));
       reset({ email: '', role: 'MEMBER' });
       queryClient.invalidateQueries({ queryKey: householdKeys.invitations(household.id) });
     } catch (error) {
@@ -103,12 +105,9 @@ function InviteForm({ household }) {
 
   return (
     <Card as="section" aria-labelledby="invite-title">
-      <h2 id="invite-title" className="text-lg font-semibold">
-        {t('invitations.title')}
-      </h2>
-      <form onSubmit={handleSubmit(onSubmit)} noValidate className="mt-4 space-y-4">
+      <CardHeader title={t('invitations.title')} titleId="invite-title" />
+      <form onSubmit={handleSubmit(onSubmit)} noValidate className="space-y-4">
         {errors.root?.server && <Alert tone="error">{errors.root.server.message}</Alert>}
-        {sentTo && <Alert tone="success">{t('invitations.sent', { email: sentTo })}</Alert>}
         <div className="grid gap-4 sm:grid-cols-[1fr_12rem]">
           <TextField
             label={t('invitations.email')}
@@ -139,28 +138,34 @@ function PendingInvitations({ household }) {
     queryKey: householdKeys.invitations(household.id),
     queryFn: () => listInvitations(household.id),
   });
+  const toast = useToast();
+  const [pendingRevoke, setPendingRevoke] = useState(null);
   const revoke = useMutation({
     mutationFn: (invitationId) => revokeInvitation(household.id, invitationId),
+    onSuccess: () => {
+      setPendingRevoke(null);
+      toast.success(t('invitations.revoked'));
+    },
+    // Close the dialog so the error shown in the card is visible (the page behind is inert).
+    onError: () => setPendingRevoke(null),
     onSettled: () =>
       queryClient.invalidateQueries({ queryKey: householdKeys.invitations(household.id) }),
   });
   const formatDate = (iso) =>
-    new Intl.DateTimeFormat(i18n.language, {
+    new Intl.DateTimeFormat(intlLocale(i18n.language), {
       dateStyle: 'medium',
       timeZone: household.timezone,
     }).format(new Date(iso));
 
   return (
     <Card as="section" aria-labelledby="pending-title">
-      <h2 id="pending-title" className="text-lg font-semibold">
-        {t('invitations.pendingTitle')}
-      </h2>
+      <CardHeader title={t('invitations.pendingTitle')} titleId="pending-title" />
       {revoke.isError && (
         <Alert tone="error" className="mt-4">
           {errorMessage(revoke.error)}
         </Alert>
       )}
-      {query.isPending && <Spinner label={t('common.loading')} />}
+      {query.isPending && <LoadingSpinner label={t('common.loading')} />}
       {query.isError && (
         <Alert tone="error" className="mt-4">
           {errorMessage(query.error)}
@@ -170,7 +175,7 @@ function PendingInvitations({ household }) {
         <p className="mt-4 text-ink-muted">{t('invitations.pendingEmpty')}</p>
       )}
       {query.isSuccess && query.data.length > 0 && (
-        <ul className="mt-4 divide-y divide-white/5">
+        <ul className="divide-y divide-line">
           {query.data.map((invitation) => {
             const canRevoke = household.myRole === 'OWNER' || invitation.role === 'MEMBER';
             return (
@@ -180,18 +185,28 @@ function PendingInvitations({ household }) {
               >
                 <span className="min-w-0">
                   <span className="block truncate font-medium" title={invitation.email}>
-                    {invitation.email}
+                    <bdi>{invitation.email}</bdi>
                   </span>
-                  <span className="block text-sm text-ink-muted">
-                    {t(`roles.${invitation.role}`)} · {t(`invitations.status.${invitation.status}`)}{' '}
-                    · {t('invitations.expires', { date: formatDate(invitation.expiresAt) })}
+                  <span className="mt-1 flex flex-wrap items-center gap-2 text-sm text-ink-muted">
+                    <Badge tone={ROLE_TONES[invitation.role]}>
+                      {t(`roles.${invitation.role}`)}
+                    </Badge>
+                    <Badge tone={invitation.status === 'expired' ? 'warning' : 'neutral'}>
+                      {t(`invitations.status.${invitation.status}`)}
+                    </Badge>
+                    <span>
+                      {t('invitations.expires', { date: formatDate(invitation.expiresAt) })}
+                    </span>
                   </span>
                 </span>
                 {canRevoke && (
                   <Button
                     variant="danger"
-                    onClick={() => revoke.mutate(invitation.id)}
-                    loading={revoke.isPending && revoke.variables === invitation.id}
+                    size="sm"
+                    onClick={() => {
+                      revoke.reset();
+                      setPendingRevoke(invitation);
+                    }}
                     aria-label={t('invitations.revokeLabel', { email: invitation.email })}
                   >
                     {t('invitations.revoke')}
@@ -202,6 +217,16 @@ function PendingInvitations({ household }) {
           })}
         </ul>
       )}
+      <ConfirmDialog
+        open={pendingRevoke !== null}
+        onClose={() => setPendingRevoke(null)}
+        onConfirm={() => revoke.mutate(pendingRevoke.id)}
+        loading={revoke.isPending}
+        title={t('invitations.revokeConfirmTitle')}
+        message={t('invitations.revokeConfirmMessage', { email: pendingRevoke?.email })}
+        confirmLabel={t('invitations.revoke')}
+        cancelLabel={t('common.back')}
+      />
     </Card>
   );
 }
@@ -215,7 +240,23 @@ export function HouseholdPage() {
     retry: (count, error) => error?.status >= 500 && count < 2,
   });
 
-  if (query.isPending) return <Spinner label={t('common.loading')} />;
+  if (query.isPending) {
+    return (
+      <div aria-busy="true" className="space-y-6">
+        <span className="sr-only" role="status">
+          {t('common.loading')}
+        </span>
+        <div className="flex items-center gap-4">
+          <Skeleton className="size-16 rounded-2xl" />
+          <span className="flex-1 space-y-3">
+            <Skeleton className="h-8 w-1/3" />
+            <Skeleton className="h-4 w-1/4" />
+          </span>
+        </div>
+        <Skeleton className="h-48 w-full rounded-[var(--radius-card)]" />
+      </div>
+    );
+  }
   if (query.isError) {
     return (
       <div className="space-y-4">
@@ -231,24 +272,68 @@ export function HouseholdPage() {
   const canInvite = household.permissions.includes('members:invite');
 
   return (
-    <div className="space-y-6">
-      <div>
+    <div className="space-y-8">
+      <header>
         <Link
           to="/"
-          className="inline-flex items-center gap-2 rounded-lg text-sm text-ink-muted hover:text-ink focus-visible:outline-2 focus-visible:outline-accent"
+          viewTransition
+          className="inline-flex min-h-9 items-center gap-2 rounded-lg text-sm text-ink-muted transition-colors hover:text-ink focus-visible:outline-2 focus-visible:outline-accent"
         >
           <ArrowLeftIcon aria-hidden="true" className="size-4 rtl:-scale-x-100" />
           {t('households.back')}
         </Link>
-        <h1 className="mt-3 text-2xl font-semibold">{household.name}</h1>
-        <p className="mt-1 text-sm text-ink-muted">
-          {t(`roles.${household.myRole}`)} ·{' '}
-          {t('households.settings', { currency: household.currency, timezone: household.timezone })}
-        </p>
+        <div className="mt-4 flex items-center gap-4 sm:gap-5">
+          <Avatar
+            name={household.name}
+            seed={household.id}
+            size="lg"
+            className="sm:size-16 sm:text-xl"
+          />
+          <div className="min-w-0">
+            <h1 className="truncate text-3xl font-semibold tracking-tight sm:text-4xl">
+              {household.name}
+            </h1>
+            <dl className="mt-2 flex flex-wrap items-center gap-2 text-sm">
+              <div className="contents">
+                <dt className="sr-only">{t('households.yourRole')}</dt>
+                <dd>
+                  <Badge tone={ROLE_TONES[household.myRole]}>
+                    {t(`roles.${household.myRole}`)}
+                  </Badge>
+                </dd>
+              </div>
+              <div className="flex items-center gap-1.5 rounded-full bg-white/[0.05] px-2.5 py-0.5 ring-1 ring-line">
+                <dt className="text-ink-subtle">{t('households.currency')}</dt>
+                <dd className="font-medium" dir="ltr">
+                  {household.currency}
+                </dd>
+              </div>
+              <div className="flex items-center gap-1.5 rounded-full bg-white/[0.05] px-2.5 py-0.5 ring-1 ring-line">
+                <dt className="text-ink-subtle">{t('households.timezone')}</dt>
+                <dd className="font-medium" dir="ltr">
+                  {household.timezone}
+                </dd>
+              </div>
+            </dl>
+          </div>
+        </div>
+      </header>
+
+      <div
+        className={
+          canInvite
+            ? 'grid grid-cols-[minmax(0,1fr)] items-start gap-6 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]'
+            : ''
+        }
+      >
+        <MembersList householdId={household.id} />
+        {canInvite && (
+          <div className="space-y-6">
+            <InviteForm household={household} />
+            <PendingInvitations household={household} />
+          </div>
+        )}
       </div>
-      <MembersList householdId={household.id} />
-      {canInvite && <InviteForm household={household} />}
-      {canInvite && <PendingInvitations household={household} />}
     </div>
   );
 }

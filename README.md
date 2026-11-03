@@ -6,7 +6,7 @@ Tigmi is a bilingual (French / Arabic with full RTL) family home management plat
 budgets, bills, shopping lists, tasks, calendar and home inventory, shared by a household.
 It has a responsive web app, an Expo mobile app (Phase 8) and one shared REST API.
 
-**Status:** Phase 2 — Authentication & households (API: accounts with email verification, sessions, password reset, households with roles, members and email invitations) and the first web screens (French). See [docs/roadmap.md](docs/roadmap.md).
+**Status:** Phase 2 — Authentication & households (API: accounts with email verification, sessions, password reset, households with roles, members and email invitations) and the web app in French and Arabic (right-to-left) with its premium design system. See [docs/roadmap.md](docs/roadmap.md).
 
 ## Stack
 
@@ -61,7 +61,8 @@ npm run dev           # API on http://localhost:4000, web on http://localhost:51
 Open http://localhost:5180 — you land on **Connexion**. Click **Créer un compte**, then open
 http://localhost:8025 (Mailpit) to find the confirmation email and click its link. Sign in, create
 a household and invite someone (their invitation email also appears in Mailpit).
-http://localhost:5180/status shows whether the API and database are reachable. Stop with `Ctrl+C`.
+http://localhost:5180/status shows whether the API and database are reachable, and
+http://localhost:5180/dev/ui shows every design-system component (development only). Stop with `Ctrl+C`.
 
 > Stop `npm run dev` before running `npm ci`: on Windows the running dev server locks native files.
 
@@ -95,7 +96,7 @@ prisma/       schema + migrations            e2e/       Playwright tests
 docker/       container init scripts         docs/      roadmap, architecture, security
 ```
 
-More: [architecture](docs/architecture.md) · [security](docs/security.md) · [roadmap](docs/roadmap.md) · [API contract (OpenAPI)](apps/api/openapi.yaml)
+More: [architecture](docs/architecture.md) · [design system](docs/design-system.md) · [feature proposals](docs/proposals.md) · [security](docs/security.md) · [roadmap](docs/roadmap.md) · [API contract (OpenAPI)](apps/api/openapi.yaml)
 
 ## Troubleshooting
 

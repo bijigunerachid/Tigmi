@@ -2,7 +2,8 @@
   "app": {
     "name": "Tigmi",
     "tagline": "Votre maison, intelligemment organisée.",
-    "skipToContent": "Aller au contenu"
+    "skipToContent": "Aller au contenu",
+    "markLabel": "Tigmi — accueil"
   },
   "common": {
     "loading": "Chargement…",
@@ -71,6 +72,13 @@
       "submitting": "Enregistrement…",
       "success": "Votre mot de passe a été modifié. Connectez-vous avec le nouveau.",
       "missingToken": "Ce lien est incomplet. Ouvrez à nouveau le lien reçu par e-mail."
+    },
+    "brand": {
+      "headline": "Un espace calme pour toute la maison.",
+      "body": "Tigmi réunit votre famille autour d’un même foyer, en français comme en arabe.",
+      "point1": "Invitez vos proches par e-mail, en toute sécurité.",
+      "point2": "Des rôles clairs : propriétaire, administrateur, membre.",
+      "point3": "Pensé en français et en arabe, de droite à gauche."
     }
   },
   "households": {
@@ -88,7 +96,13 @@
     },
     "loadError": "Impossible de charger vos foyers.",
     "back": "Tous mes foyers",
-    "settings": "Devise : {{currency}} · Fuseau horaire : {{timezone}}"
+    "greeting": "Bonjour, {{name}}",
+    "subtitle": "Retrouvez ici chaque foyer que vous partagez avec votre famille.",
+    "emptyTitle": "Créez votre premier foyer",
+    "newHousehold": "Nouveau foyer",
+    "yourRole": "Votre rôle",
+    "currency": "Devise",
+    "timezone": "Fuseau horaire"
   },
   "roles": {
     "OWNER": "Propriétaire",
@@ -129,7 +143,10 @@
       "wrongAccount": "Vous êtes connecté avec {{current}}, mais l’invitation a été envoyée à {{email}}. Déconnectez-vous puis connectez-vous avec la bonne adresse.",
       "invalid": "Cette invitation est invalide, a expiré ou a déjà été utilisée. Demandez à la personne qui vous a invité d’en envoyer une nouvelle.",
       "missingToken": "Ce lien d’invitation est incomplet. Ouvrez à nouveau le lien reçu par e-mail."
-    }
+    },
+    "revokeConfirmTitle": "Annuler cette invitation ?",
+    "revokeConfirmMessage": "Le lien envoyé à {{email}} ne fonctionnera plus. Vous pourrez inviter cette personne à nouveau plus tard.",
+    "revoked": "Invitation annulée."
   },
   "status": {
     "title": "État du système",
@@ -180,5 +197,40 @@
     "FORBIDDEN": "Votre rôle ne permet pas cette action.",
     "HOUSEHOLD_NOT_FOUND": "Ce foyer n’existe pas ou vous n’y avez pas accès.",
     "SESSION_REVOKED": "Votre session a expiré. Reconnectez-vous."
+  },
+  "ui": {
+    "close": "Fermer",
+    "cancel": "Annuler",
+    "confirm": "Confirmer",
+    "moreActions": "Plus d’actions",
+    "table": {
+      "sortAscending": "Trier par ordre croissant",
+      "sortDescending": "Trier par ordre décroissant"
+    },
+    "pagination": {
+      "label": "Pagination",
+      "previous": "Précédent",
+      "next": "Suivant",
+      "page": "Page {{page}}",
+      "status": "Page {{page}} sur {{pageCount}}"
+    },
+    "toast": {
+      "dismiss": "Fermer la notification",
+      "region": "Notifications"
+    }
+  },
+  "nav": {
+    "main": "Navigation principale",
+    "households": "Mes foyers",
+    "household": "Foyer",
+    "collapse": "Réduire le menu",
+    "expand": "Développer le menu",
+    "account": "Compte",
+    "householdsSection": "Vos foyers"
+  },
+  "language": {
+    "label": "Langue",
+    "fr": "Français",
+    "ar": "العربية"
   }
 }

@@ -10,13 +10,20 @@ const isCI = Boolean(process.env.CI);
 
 export default defineConfig({
   testDir: './e2e',
+  globalSetup: './e2e/global-setup.js',
   fullyParallel: true,
   forbidOnly: isCI,
   retries: isCI ? 1 : 0,
+  // Assertions wait up to 10 s: with four browsers in parallel, sign-up (Argon2 + email)
+  // can take longer than the 5 s default without any problem for real users.
+  expect: { timeout: 10_000 },
   reporter: isCI ? [['list'], ['html', { open: 'never' }]] : 'list',
   use: {
     baseURL: `http://localhost:${WEB_PORT}`,
     trace: 'retain-on-failure',
+    // Browse like a family in Morocco: French locale (date formats) and local time zone.
+    locale: 'fr-FR',
+    timezoneId: 'Africa/Casablanca',
     screenshot: 'only-on-failure',
   },
   projects: [
@@ -33,6 +40,8 @@ export default defineConfig({
     {
       // The real API, pointed at the *_test database.
       command: 'node apps/api/src/server.js',
+      // Show the API's warnings/errors in the test output (it only logs at warn level here).
+      stdout: 'pipe',
       url: `http://localhost:${API_PORT}/api/v1/health`,
       reuseExistingServer: false,
       timeout: 60_000,

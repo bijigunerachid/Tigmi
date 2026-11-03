@@ -88,6 +88,20 @@ describe('Login page', () => {
   });
 });
 
+describe('Language switch', () => {
+  it('turns the whole document right-to-left in Arabic and back', async () => {
+    mockApi({});
+    renderRoute('/login');
+    await userEvent.click(await screen.findByRole('button', { name: 'العربية' }));
+    expect(await screen.findByRole('heading', { name: 'تسجيل الدخول' })).toBeInTheDocument();
+    await waitFor(() => expect(document.documentElement).toHaveAttribute('dir', 'rtl'));
+    expect(document.documentElement).toHaveAttribute('lang', 'ar');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Français' }));
+    await waitFor(() => expect(document.documentElement).toHaveAttribute('dir', 'ltr'));
+  });
+});
+
 describe('Register page', () => {
   it('creates the account and shows "check your email"', async () => {
     mockApi({ 'POST /auth/register': () => json(202, { data: { status: 'check_email' } }) });
@@ -102,6 +116,23 @@ describe('Register page', () => {
       await screen.findByRole('heading', { name: 'Vérifiez votre boîte de réception' }),
     ).toBeInTheDocument();
     expect(screen.getByText(/amina@example.com/)).toBeInTheDocument();
+  });
+
+  it('creates the account in the language chosen on the page', async () => {
+    const fetchMock = mockApi({
+      'POST /auth/register': () => json(202, { data: { status: 'check_email' } }),
+    });
+    renderRoute('/register');
+    await userEvent.click(await screen.findByRole('button', { name: 'العربية' }));
+
+    await userEvent.type(await screen.findByLabelText('الاسم الكامل'), 'أمينة بنعلي');
+    await userEvent.type(screen.getByLabelText('البريد الإلكتروني'), 'amina@example.com');
+    await userEvent.type(screen.getByLabelText('كلمة المرور'), 'a long family passphrase');
+    await userEvent.click(screen.getByRole('button', { name: 'إنشاء حسابي' }));
+
+    await screen.findByRole('heading', { name: 'تحقّق من بريدك الوارد' });
+    const call = fetchMock.mock.calls.find(([url]) => url.endsWith('/auth/register'));
+    expect(JSON.parse(call[1].body).preferredLanguage).toBe('ar');
   });
 
   it('applies the shared password rules', async () => {
@@ -183,7 +214,7 @@ describe('Session restore', () => {
     });
     renderRoute('/');
     expect(await screen.findByRole('heading', { name: 'Mes foyers' })).toBeInTheDocument();
-    expect(screen.getByText('Connecté en tant que Amina Benali')).toBeInTheDocument();
+    expect(screen.getByText('Bonjour, Amina')).toBeInTheDocument();
   });
 
   it('sends signed-out visitors of private pages to the login page and back', async () => {
