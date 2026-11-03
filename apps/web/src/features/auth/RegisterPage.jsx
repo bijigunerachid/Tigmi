@@ -11,7 +11,7 @@ import { applyApiError, fieldError } from '../../lib/forms.js';
 import { register as registerAccount } from './auth-api.js';
 
 export function RegisterPage() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const location = useLocation();
   const [params] = useSearchParams();
@@ -30,7 +30,12 @@ export function RegisterPage() {
 
   const onSubmit = async (values) => {
     try {
-      await registerAccount(values);
+      // The account (and its emails) use the language shown at the moment of submitting —
+      // the person may have switched language after the page opened.
+      await registerAccount({
+        ...values,
+        preferredLanguage: i18n.resolvedLanguage === 'ar' ? 'ar' : 'fr',
+      });
       navigate(`/check-email${next ? `?next=${encodeURIComponent(next)}` : ''}`, {
         state: { email: values.email },
       });

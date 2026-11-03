@@ -18,7 +18,8 @@ export default defineConfig(({ mode }) => {
   return {
     envDir,
     plugins: [react(), tailwindcss()],
-    server: { port, strictPort: true, proxy },
+    // warmup: pre-compile the app entry when the dev server starts, so the first page is fast.
+    server: { port, strictPort: true, proxy, warmup: { clientFiles: ['./src/main.jsx'] } },
     preview: { port, strictPort: true, proxy },
     build: { sourcemap: false },
     test: {

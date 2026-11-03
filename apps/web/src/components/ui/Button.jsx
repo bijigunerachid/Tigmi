@@ -1,16 +1,23 @@
-const VARIANTS = {
-  primary: 'bg-brand text-white hover:bg-brand/90',
-  secondary: 'border border-white/10 bg-white/5 text-ink hover:bg-white/10',
-  ghost: 'text-ink-muted hover:bg-white/5 hover:text-ink',
-  danger: 'border border-danger/40 text-danger hover:bg-danger/10',
-};
+import { Link } from 'react-router';
+import { buttonClasses } from './variants.js';
+
+function Busy() {
+  return (
+    <span
+      aria-hidden="true"
+      className="size-4 animate-spin rounded-full border-2 border-current border-e-transparent"
+    />
+  );
+}
 
 /**
- * Accessible button: 44px minimum touch target, visible focus ring, and `loading` shows a label
- * while keeping the button disabled so forms cannot be submitted twice.
+ * Accessible button. `loading` keeps it disabled (no double submission) and can swap the label.
+ * `size="icon"` is a square 44px icon button: give it an `aria-label`.
  */
 export function Button({
-  variant = 'primary',
+  variant,
+  size,
+  fullWidth,
   loading = false,
   loadingLabel,
   disabled,
@@ -24,16 +31,20 @@ export function Button({
       type={type}
       disabled={disabled || loading}
       aria-busy={loading || undefined}
-      className={`inline-flex min-h-11 items-center justify-center gap-2 rounded-xl px-4 font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-60 ${VARIANTS[variant]} ${className}`}
+      className={`${buttonClasses({ variant, size, fullWidth })} ${className}`}
       {...props}
     >
-      {loading && (
-        <span
-          aria-hidden="true"
-          className="size-4 animate-spin rounded-full border-2 border-current border-e-transparent"
-        />
-      )}
+      {loading && <Busy />}
       {loading && loadingLabel ? loadingLabel : children}
     </button>
+  );
+}
+
+/** A router link that looks exactly like a Button (same variants and sizes). */
+export function ButtonLink({ variant, size, fullWidth, className = '', children, ...props }) {
+  return (
+    <Link className={`${buttonClasses({ variant, size, fullWidth })} ${className}`} {...props}>
+      {children}
+    </Link>
   );
 }

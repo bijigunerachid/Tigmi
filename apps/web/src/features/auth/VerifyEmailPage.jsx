@@ -2,14 +2,12 @@ import { CheckCircleIcon, ExclamationTriangleIcon } from '@heroicons/react/24/ou
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router';
+import { buttonClasses } from '../../components/ui/variants.js';
 import { Card } from '../../components/ui/Card.jsx';
-import { Spinner } from '../../components/ui/Spinner.jsx';
+import { LoadingSpinner } from '../../components/ui/LoadingSpinner.jsx';
 import { useLinkToken } from '../../hooks/useLinkToken.js';
 import { errorMessage } from '../../lib/i18n.js';
 import { verifyEmail } from './auth-api.js';
-
-const linkClass =
-  'inline-flex min-h-11 w-full items-center justify-center rounded-xl bg-brand px-4 font-medium text-white hover:bg-brand/90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent';
 
 /** Opened from the verification email: /verify-email#token=… */
 export function VerifyEmailPage() {
@@ -33,13 +31,13 @@ export function VerifyEmailPage() {
         {t('auth.verify.title')}
       </h1>
       <div aria-live="polite" className="mt-4">
-        {state.status === 'working' && <Spinner label={t('auth.verify.working')} />}
+        {state.status === 'working' && <LoadingSpinner label={t('auth.verify.working')} />}
 
         {state.status === 'success' && (
           <div className="space-y-6">
             <CheckCircleIcon aria-hidden="true" className="mx-auto size-12 text-success" />
             <p role="status">{t('auth.verify.success')}</p>
-            <Link to="/login" className={linkClass}>
+            <Link to="/login" className={buttonClasses({ fullWidth: true })}>
               {t('common.signIn')}
             </Link>
           </div>
@@ -55,7 +53,7 @@ export function VerifyEmailPage() {
                   ? t('auth.verify.failed')
                   : errorMessage(state.error)}
             </p>
-            <Link to="/login" className={linkClass}>
+            <Link to="/login" className={buttonClasses({ fullWidth: true })}>
               {t('auth.verify.requestNew')}
             </Link>
           </div>

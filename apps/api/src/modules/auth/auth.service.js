@@ -60,23 +60,29 @@ export function createAuthService({ prisma, accessTokens, audit, config, mail, u
      */
     async register({ fullName, email, password, preferredLanguage }, client) {
       const passwordHash = await hashPassword(password);
+      const verification = userTokens.prepare({
+        purpose: EMAIL_VERIFICATION,
+        ttlSeconds: config.emailVerificationTtlSeconds,
+      });
       try {
-        const { user, token } = await prisma.$transaction(async (tx) => {
-          const created = await tx.user.create({
-            data: { fullName, email, passwordHash, preferredLanguage },
-          });
-          const verificationToken = await userTokens.issue(tx, {
-            userId: created.id,
-            purpose: EMAIL_VERIFICATION,
-            ttlSeconds: config.emailVerificationTtlSeconds,
-          });
-          await audit.record(
-            { action: AUDIT_ACTIONS.REGISTER, userId: created.id, ipAddress: client.ipAddress },
-            tx,
-          );
-          return { user: created, token: verificationToken };
+        // One atomic nested write (user + verification token) instead of an interactive
+        // transaction: no connection is held open across round trips, so heavy load cannot push
+        // it past the transaction timeout (seen as P2028 under end-to-end load).
+        const user = await prisma.user.create({
+          data: {
+            fullName,
+            email,
+            passwordHash,
+            preferredLanguage,
+            userTokens: { create: verification.data },
+          },
         });
-        mail.sendVerificationEmail(user, token);
+        await audit.record({
+          action: AUDIT_ACTIONS.REGISTER,
+          userId: user.id,
+          ipAddress: client.ipAddress,
+        });
+        mail.sendVerificationEmail(user, verification.token);
       } catch (error) {
         if (!(error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002')) {
           throw error;

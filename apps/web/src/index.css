@@ -1,37 +1,261 @@
 @import 'tailwindcss';
+@import '@fontsource-variable/inter/index.css';
+@import '@fontsource-variable/noto-sans-arabic/index.css';
 
-/* Brand tokens (full design system arrives in Phase 3). */
+/*
+ * Tigmi design tokens.
+ * Colours come from the product brief; semantic names (surface, line, ink…) are what components
+ * use, so a future light theme only redefines these variables.
+ */
 @theme {
+  /* Brand */
   --color-navy: #0f172a;
   --color-brand: #2563eb;
+  --color-brand-strong: #1d4ed8;
   --color-accent: #22d3ee;
+
+  /* Surfaces: page → card → raised (menus, dialogs) */
   --color-canvas: #080d18;
   --color-surface: #111827;
+  --color-raised: #172033;
+  --color-line: rgb(148 163 184 / 0.14);
+  --color-line-strong: rgb(148 163 184 / 0.28);
+
+  /* Text */
   --color-ink: #f8fafc;
   --color-ink-muted: #94a3b8;
+  --color-ink-subtle: #8190a5;
+
+  /* Status (checked for 4.5:1 contrast on surface) */
   --color-success: #34d399;
   --color-warning: #fbbf24;
   --color-danger: #f87171;
+  --color-info: #60a5fa;
+
+  /* Typography: Inter for Latin; Arabic pages switch to Noto Sans Arabic (see below) */
+  --font-sans:
+    'Inter Variable', 'Noto Sans Arabic Variable', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-arabic: 'Noto Sans Arabic Variable', 'Inter Variable', system-ui, sans-serif;
+
+  /* Shape and depth */
+  --radius-control: 0.75rem;
+  --radius-card: 1rem;
+  --radius-dialog: 1.25rem;
+  --shadow-card: 0 1px 0 rgb(255 255 255 / 0.03) inset, 0 12px 32px -12px rgb(0 0 0 / 0.55);
+  --shadow-raised: 0 1px 0 rgb(255 255 255 / 0.05) inset, 0 24px 48px -16px rgb(0 0 0 / 0.7);
+
+  /* Motion: purposeful, short (≤ 300 ms for UI), strong ease-out curves. Movement is removed
+     for people who ask for reduced motion (see the end of this file). */
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+  --ease-out-soft: var(--ease-out);
+  --animate-fade-in: fade-in 180ms var(--ease-out);
+  --animate-rise-in: rise-in 220ms var(--ease-out);
+  --animate-slide-in-end: slide-in-end 300ms var(--ease-drawer);
+  --animate-shimmer: shimmer 1.6s linear infinite;
+  --animate-reveal: reveal 420ms var(--ease-out) both;
+  --animate-sheet-up: sheet-up 320ms var(--ease-drawer);
+
+  /* Depth: a cool rim light on top edges, and a soft brand glow for primary actions */
+  --shadow-glow: 0 0 0 1px rgb(34 211 238 / 0.18), 0 18px 48px -18px rgb(34 211 238 / 0.35);
+
+  @keyframes fade-in {
+    from {
+      opacity: 0;
+    }
+  }
+  @keyframes sheet-up {
+    from {
+      transform: translateY(100%);
+    }
+  }
+  @keyframes reveal {
+    from {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+  }
+  @keyframes rise-in {
+    from {
+      opacity: 0;
+      transform: translateY(6px) scale(0.98);
+    }
+  }
+  @keyframes slide-in-end {
+    from {
+      transform: translateX(var(--slide-from, 100%));
+    }
+  }
+  @keyframes shimmer {
+    from {
+      background-position: 200% 0;
+    }
+    to {
+      background-position: -200% 0;
+    }
+  }
+}
+
+/* ---------------------------------------------------------------------------------------------
+ * Signature details
+ * ------------------------------------------------------------------------------------------- */
+
+/* Staggered entrance on page load: children reveal one after another (once, never on repeat
+   actions). Set --i on each child (0, 1, 2…); delays stay short so content is never "blocked". */
+@utility stagger {
+  & > * {
+    animation: var(--animate-reveal);
+    animation-delay: calc(min(var(--i, 0), 8) * 60ms);
+  }
+}
+
+/* Frosted glass, reserved for navigation that floats above content. */
+@utility glass {
+  background: rgb(11 17 32 / 0.72);
+  backdrop-filter: blur(16px) saturate(140%);
+  -webkit-backdrop-filter: blur(16px) saturate(140%);
+}
+
+/* Hairline highlight along the top edge of a surface — reads as light hitting glass. */
+@utility rim {
+  position: relative;
+  &::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    padding: 1px;
+    background: linear-gradient(180deg, rgb(255 255 255 / 0.1), rgb(255 255 255 / 0) 40%);
+    mask:
+      linear-gradient(#000 0 0) content-box,
+      linear-gradient(#000 0 0);
+    mask-composite: exclude;
+    pointer-events: none;
+  }
+}
+
+/* Ambient light behind the sign-in pages. Deliberately STATIC: an endlessly drifting background
+   measurably loaded the CPU (it doubled end-to-end test time) and would drain phone batteries,
+   for little purpose. It fades in once instead. */
+.aurora {
+  position: absolute;
+  inset: -20%;
+  overflow: hidden;
+  pointer-events: none;
+}
+.aurora > span {
+  position: absolute;
+  width: 55vmax;
+  height: 55vmax;
+  border-radius: 9999px;
+  /* No filter: blur — the radial gradients already fade out, and a blurred layer this large is
+     expensive to repaint on modest phones (and in parallel headless test browsers). */
+  opacity: 0.45;
+}
+.aurora {
+  animation: fade-in 900ms var(--ease-out) both;
+}
+.aurora > span:nth-child(1) {
+  top: -10%;
+  inset-inline-start: -10%;
+  background: radial-gradient(circle, rgb(37 99 235 / 0.9), transparent 65%);
+}
+.aurora > span:nth-child(2) {
+  bottom: -20%;
+  inset-inline-end: -10%;
+  background: radial-gradient(circle, rgb(34 211 238 / 0.55), transparent 65%);
+}
+.aurora > span:nth-child(3) {
+  top: 30%;
+  inset-inline-start: 35%;
+  width: 35vmax;
+  height: 35vmax;
+  background: radial-gradient(circle, rgb(99 102 241 / 0.5), transparent 65%);
+}
+
+/* Page transitions (View Transitions API, enabled per navigation by React Router): a short
+   cross-fade with a slight rise. Browsers without support simply navigate instantly. */
+::view-transition-old(root) {
+  animation: 160ms var(--ease-out) both vt-out;
+}
+::view-transition-new(root) {
+  animation: 260ms var(--ease-out) both vt-in;
+}
+/* The navigation stays perfectly still while the page content changes. */
+.vt-nav {
+  view-transition-name: app-nav;
+}
+::view-transition-group(app-nav) {
+  animation: none;
+}
+@keyframes vt-out {
+  to {
+    opacity: 0;
+  }
+}
+@keyframes vt-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+
+/* Layers above the page: keep every stacking value in one place. */
+:root {
+  --z-header: 30;
+  --z-dropdown: 40;
+  --z-toast: 60;
+  --z-tooltip: 70;
+}
+
+/* Drawers slide in from the end edge: right in French, left in Arabic. */
+[dir='rtl'] {
+  --slide-from: -100%;
 }
 
 @layer base {
   html {
     color-scheme: dark;
+    -webkit-text-size-adjust: 100%;
+  }
+  html[lang='ar'] {
+    font-family: var(--font-arabic);
   }
   body {
-    @apply min-h-dvh bg-canvas text-ink antialiased;
-    font-family:
-      system-ui,
-      -apple-system,
-      'Segoe UI',
-      Roboto,
-      sans-serif;
+    @apply min-h-dvh bg-canvas font-sans text-ink antialiased;
+    /* A faint, restrained glow at the top of the page — the only gradient in the layout. */
+    background-image: radial-gradient(120% 60% at 50% -10%, rgb(37 99 235 / 0.12), transparent 60%);
+    background-attachment: fixed;
   }
-}
-
-/* Headings receive focus after navigation (for screen readers); no ring for that case. */
-main h1:focus {
-  outline: none;
+  /* Arabic script needs more line height and no letter-spacing tweaks to stay readable. */
+  html[lang='ar'] body {
+    line-height: 1.75;
+  }
+  html[lang='ar'] :is(h1, h2, h3, .tracking-tight) {
+    letter-spacing: 0;
+  }
+  ::selection {
+    background: rgb(34 211 238 / 0.3);
+  }
+  /* Headings receive focus after navigation (for screen readers); no ring for that case. */
+  main h1:focus {
+    outline: none;
+  }
+  /* While a modal dialog is open, the page behind must not scroll. */
+  html:has(dialog[open]:modal) {
+    overflow: hidden;
+  }
+  /* Native dialogs: dim and blur the page behind. */
+  dialog::backdrop {
+    background: rgb(2 6 15 / 0.7);
+    backdrop-filter: blur(4px);
+  }
+  /* Date inputs: show the calendar icon in a light colour on the dark theme. */
+  input[type='date']::-webkit-calendar-picker-indicator {
+    filter: invert(0.8);
+    cursor: pointer;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -41,5 +265,10 @@ main h1:focus {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  ::view-transition-old(root),
+  ::view-transition-new(root) {
+    animation: none !important;
   }
 }

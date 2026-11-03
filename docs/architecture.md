@@ -176,6 +176,9 @@ refresh ──► token found & unused ──► mark used (compare-and-swap) + 
   emits TypeScript files, which this JavaScript-only project (and Jest without a build step) cannot
   load. `prisma-client-js` is marked "legacy"; migration path: switch when Node runs TypeScript
   natively and stably, or if Prisma 8 removes it.
+- Interactive transactions use explicit limits (`config/database.js`: wait 5 s, run 10 s).
+  Prefer single atomic statements (nested writes) where possible: registration used to hold a
+  transaction open across round trips and hit Prisma's 5 s default under load (`P2028`).
 - Prisma 7 needs a **driver adapter** (`@prisma/adapter-pg` + `pg`); the connection URL lives in
   `prisma.config.js`, not in `schema.prisma`.
 - Migrations: `npm run db:migrate -- --name <change>` runs `prisma migrate dev`, then the
@@ -198,7 +201,8 @@ lib/i18n.js           i18next (fr now, ar in Phase 3), errorMessage() / validati
 lib/forms.js          maps API VALIDATION_ERROR details onto react-hook-form fields
 lib/safe-redirect.js  ?next= only accepts in-app paths (no open redirect)
 hooks/useLinkToken.js reads #token= from emailed links, then removes it from the address bar
-components/ui/        Button, TextField/PasswordField, SelectField, Alert, Card, Spinner
+components/ui/        design system (see docs/design-system.md)
+dev/UiGallery.jsx     component gallery at /dev/ui — development builds only
 components/layout/    AuthLayout (centered card), AppLayout (top bar, sign out)
 features/auth/        AuthProvider, guards, login/register/check-email/verify/forgot/reset pages
 features/households/  households list + create, household page (members, invite, pending)
@@ -230,6 +234,19 @@ test/                 setup + render helpers (real routes in StrictMode, fake AP
 - Pitfall found in this step: `x ??= (async () => { try {…} finally { x = null } })()` caches a
   settled promise forever when the async body returns before its first `await`; use
   `.finally()` on the promise instead (regression test in `lib/api-client.test.js`).
+
+### App shell and languages
+
+- `AuthLayout`: brand panel + form on desktop, compact header on phones, language switch on
+  every page. `AppLayout`: collapsible sidebar on desktop (state remembered), frosted top bar
+  and floating bottom bar on phones. Every entry points to a real page (households, each
+  household, last opened household); the account menu holds language and sign-out.
+- Languages: French and Arabic (`locales/fr`, `locales/ar`, same keys — a test fails if one
+  is missing or a `{{placeholder}}` differs). Choice order: saved choice on this device →
+  browser language → French; after sign-in the account language applies unless the device
+  has an explicit choice. Accounts are created in the language shown when submitting the
+  sign-up form (so emails match). Numbers and dates use `fr-MA` / `ar-MA` (Latin digits).
+- Saving the language to the account (`PATCH /users/me`) arrives with `feature/settings`.
 
 ### Forms, validation and text
 

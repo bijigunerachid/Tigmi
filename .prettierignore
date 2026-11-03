@@ -5,3 +5,5 @@ playwright-report
 test-results
 package-lock.json
 prisma/migrations
+# Local Claude Code skills and settings (tooling, not project code)
+.claude

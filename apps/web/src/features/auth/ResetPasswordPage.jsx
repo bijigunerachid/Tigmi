@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router';
+import { buttonClasses } from '../../components/ui/variants.js';
 import { Alert } from '../../components/ui/Alert.jsx';
 import { Button } from '../../components/ui/Button.jsx';
 import { Card } from '../../components/ui/Card.jsx';
@@ -54,10 +55,7 @@ export function ResetPasswordPage() {
       {token && done && (
         <div className="mt-6 space-y-4">
           <Alert tone="success">{t('auth.reset.success')}</Alert>
-          <Link
-            to="/login"
-            className="inline-flex min-h-11 w-full items-center justify-center rounded-xl bg-brand px-4 font-medium text-white hover:bg-brand/90"
-          >
+          <Link to="/login" className={buttonClasses({ fullWidth: true })}>
             {t('common.signIn')}
           </Link>
         </div>

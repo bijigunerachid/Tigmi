@@ -1,32 +1,26 @@
-import { useId } from 'react';
+import { ChevronDownIcon } from '@heroicons/react/20/solid';
+import { Field } from './TextField.jsx';
+import { FIELD_CLASSES } from './variants.js';
 
-/** Native <select> with a real label: accessible and comfortable on phones. */
-export function SelectField({ label, error, options, className = '', ...selectProps }) {
-  const id = useId();
-  const errorId = error ? `${id}-error` : undefined;
+/** Native <select> (accessible, comfortable on phones) with a themed chevron on the end side. */
+export function SelectField({ label, hint, error, options, className = '', ...selectProps }) {
   return (
-    <div className={`space-y-1.5 ${className}`}>
-      <label htmlFor={id} className="block text-sm font-medium">
-        {label}
-      </label>
-      <select
-        id={id}
-        aria-invalid={error ? true : undefined}
-        aria-describedby={errorId}
-        className="block min-h-11 w-full rounded-xl border border-white/10 bg-canvas px-3 text-ink focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/40"
-        {...selectProps}
-      >
-        {options.map((option) => (
-          <option key={option.value} value={option.value}>
-            {option.label}
-          </option>
-        ))}
-      </select>
-      {error && (
-        <p id={errorId} className="text-sm text-danger">
-          {error}
-        </p>
+    <Field label={label} hint={hint} error={error} className={className}>
+      {(a11y) => (
+        <div className="relative">
+          <select className={`${FIELD_CLASSES} appearance-none pe-10`} {...a11y} {...selectProps}>
+            {options.map((option) => (
+              <option key={option.value} value={option.value} className="bg-surface">
+                {option.label}
+              </option>
+            ))}
+          </select>
+          <ChevronDownIcon
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-y-0 end-3 my-auto size-5 text-ink-muted"
+          />
+        </div>
       )}
-    </div>
+    </Field>
   );
 }

@@ -88,7 +88,8 @@ test.describe('Web authentication and households', () => {
     // The session survives a page reload (refresh cookie), then sign out ends it.
     await page.reload();
     await expect(page.getByRole('heading', { name: 'Dar Benali', level: 1 })).toBeVisible();
-    await page.getByRole('button', { name: 'Se déconnecter' }).click();
+    await page.getByRole('button', { name: 'Compte' }).click();
+    await page.getByRole('menuitem', { name: 'Se déconnecter' }).click();
     await expect(page.getByRole('heading', { name: 'Connexion' })).toBeVisible();
     await page.goto('/');
     await expect(page.getByRole('heading', { name: 'Connexion' })).toBeVisible();
@@ -166,6 +167,8 @@ test.describe('Web authentication and households', () => {
 
     await page.goto('/login');
     await page.getByRole('link', { name: 'Mot de passe oublié ?' }).click();
+    // The sign-in page (same "Adresse e-mail" field) stays mounted during the view transition.
+    await expect(page.getByRole('heading', { name: 'Mot de passe oublié' })).toBeVisible();
     await page.getByLabel('Adresse e-mail').fill(email);
     await page.getByRole('button', { name: 'Envoyer le lien' }).click();
     await expect(page.getByText(/Si un compte existe pour cette adresse/)).toBeVisible();

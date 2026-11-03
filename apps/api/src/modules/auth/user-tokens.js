@@ -5,18 +5,26 @@ import { generateOpaqueToken, hashToken } from './tokens.js';
  * tokens for the same purpose, so only the latest link works.
  */
 export function createUserTokens({ prisma }) {
+  /** A fresh token and the row to store (hash only), for use in a nested create. */
+  function prepare({ purpose, ttlSeconds }) {
+    const token = generateOpaqueToken();
+    return {
+      token,
+      data: {
+        purpose,
+        tokenHash: hashToken(token),
+        expiresAt: new Date(Date.now() + ttlSeconds * 1000),
+      },
+    };
+  }
+
   return {
+    prepare,
+
     async issue(db, { userId, purpose, ttlSeconds }) {
-      const token = generateOpaqueToken();
+      const { token, data } = prepare({ purpose, ttlSeconds });
       await db.userToken.deleteMany({ where: { userId, purpose, usedAt: null } });
-      await db.userToken.create({
-        data: {
-          userId,
-          purpose,
-          tokenHash: hashToken(token),
-          expiresAt: new Date(Date.now() + ttlSeconds * 1000),
-        },
-      });
+      await db.userToken.create({ data: { userId, ...data } });
       return token;
     },
 

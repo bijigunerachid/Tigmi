@@ -12,6 +12,7 @@ export default [
       'playwright-report/**',
       'test-results/**',
       'prisma/migrations/**',
+      '.claude/**',
     ],
   },
 
