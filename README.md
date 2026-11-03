@@ -6,7 +6,7 @@ Tigmi is a bilingual (French / Arabic with full RTL) family home management plat
 budgets, bills, shopping lists, tasks, calendar and home inventory, shared by a household.
 It has a responsive web app, an Expo mobile app (Phase 8) and one shared REST API.
 
-**Status:** Phase 2 — Authentication & households (API: accounts with email verification, sessions, password reset, households with roles and members). See [docs/roadmap.md](docs/roadmap.md).
+**Status:** Phase 2 — Authentication & households (API: accounts with email verification, sessions, password reset, households with roles, members and email invitations). See [docs/roadmap.md](docs/roadmap.md).
 
 ## Stack
 

@@ -62,6 +62,18 @@ and every accepted risk with a review date.
 | Accidental deletion                  | Deleting a household requires typing its exact name; the audit trail is kept (no foreign key from `audit_logs`).                                          |
 | Forensics                            | `household.created/updated/deleted`, `member.role_changed/removed/left` audited with actor, target and old/new role.                                      |
 
+## Invitations (Phase 2 — `feature/invitations`)
+
+| Threat                                   | Defence                                                                                                                                                                                                  |
+| ---------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Forwarded / leaked invitation link       | Accepting requires being signed in **as the invited address** (verified email). Someone else gets `403 INVITATION_EMAIL_MISMATCH` and the link stays valid for the real invitee.                         |
+| Replay / double use                      | 256-bit token stored as SHA-256, single use (compare-and-swap inside a household lock), 7-day expiry, re-invite and cancel invalidate old links. Tokens travel in URL fragments and request bodies only. |
+| Privilege escalation through invitations | Nobody can be invited as OWNER; ADMINs may only invite MEMBERs and cannot cancel ADMIN invitations (`canAssignRole`).                                                                                    |
+| Spam / abuse                             | `members:invite` permission, 30 invitations/hour per IP, one email per address per minute, members + pending invitations capped per household (50).                                                      |
+| Header / HTML injection via names        | Full names and household names reject control characters; subject variables are stripped of control characters again at render time; bodies are HTML-escaped (tested).                                   |
+| Cross-household tampering                | Invitation ids are always looked up together with the household id from the URL (`INVITATION_NOT_FOUND`).                                                                                                |
+| Forensics                                | `invitation.sent/revoked/accepted` audited (address, role, actor).                                                                                                                                       |
+
 ## Planned
 
 - **feature/settings:** list/revoke sessions per device, "sign out everywhere", change password.

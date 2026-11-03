@@ -41,7 +41,8 @@ modules/<name>/      one folder per feature: <name>.routes.js, .controller.js, .
 modules/auth/        + password.js (Argon2id), tokens.js (JWT, opaque tokens), cookies.js
 modules/audit/       audit.service.js: append-only audit log writer
 modules/mail/        mail.service.js (SMTP, sent off the request path), templates.js (fr/ar, RTL)
-modules/households/  permissions.js (RBAC map), households + members services, routes
+modules/households/  permissions.js (RBAC map), household-lock.js, households + members services
+modules/invitations/ invitations.service.js (invite, list, revoke, preview, accept), routes
 modules/users/       users.serializer.js: the only public shape of a user
 utils/errors.js      AppError (status + stable code + optional headers) and helpers
 openapi.yaml         OpenAPI 3.1 description of every endpoint (kept in sync in each step)
@@ -91,6 +92,10 @@ returned in the `X-Request-Id` header and appears in server logs, so a user-repo
 | GET/PATCH/DELETE | `/api/v1/households/:householdId` | Bearer + permission | 200 / 200 / 204 |
 | GET | `/api/v1/households/:householdId/members` | Bearer + `members:read` | 200 members |
 | PATCH/DELETE | `/api/v1/households/:householdId/members/:memberId` | Bearer + hierarchy | 200 / 204 |
+| POST/GET | `/api/v1/households/:householdId/invitations` | Bearer + `members:invite` | 201 invitation (emailed) / 200 outstanding |
+| DELETE | `/api/v1/households/:householdId/invitations/:invitationId` | Bearer + `members:invite` | 204 cancelled |
+| POST | `/api/v1/invitations/preview` | emailed token | 200 household name, inviter, role |
+| POST | `/api/v1/invitations/accept` | Bearer (invited email) + token | 200 household with new role |
 
 Full contract: [`apps/api/openapi.yaml`](../apps/api/openapi.yaml).
 
@@ -128,6 +133,20 @@ stale roles cannot be used (tested: two owners demoting each other at once alway
 
 Later modules add their permissions (e.g. `transactions:write`) to the same map.
 
+### Invitations
+
+```
+OWNER/ADMIN ── POST invitations {email, role} ──► invitations row (token SHA-256, 7 days)
+                                              └─► email: /invitations/accept#token=…
+invitee ── POST /invitations/preview {token} ──► "Amina invites you to Dar Benali" (no account needed)
+        ── sign up with that email + verify ──► login
+        ── POST /invitations/accept {token} ──► membership with the invited role
+```
+
+Accept requires the signed-in account's email to equal the invited address; sign-in requires
+a verified email, so this proves inbox ownership. Invites, cancellations and accepts lock the
+household row like member changes do (member cap and single use stay consistent).
+
 ### Authentication flow
 
 ```
@@ -164,7 +183,7 @@ refresh ──► token found & unused ──► mark used (compare-and-swap) + 
   client itself). Never chain extra commands inside `db:migrate`: npm appends `-- args` to the
   last command, so `--name` would go to the wrong one (found the hard way in Phase 2).
 - Tables so far: `users`, `sessions`, `refresh_tokens`, `user_tokens`, `households`,
-  `household_members`, `audit_logs` (snake_case names via `@map`).
+  `household_members`, `invitations`, `audit_logs` (snake_case names via `@map`).
 - Conventions: UUIDv7 primary keys (time-ordered, index-friendly), `timestamptz` columns, `Decimal(12,2)` for money (serialised as strings),
   `createdAt`/`updatedAt` on every table, explicit `onDelete` on every relation.
 

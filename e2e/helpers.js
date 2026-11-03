@@ -6,7 +6,7 @@ export const PASSWORD = 'a long family passphrase';
 export const uniqueEmail = (prefix = 'e2e') =>
   `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@example.com`;
 
-/** Waits for the newest `kind` link (verify-email | reset-password) emailed to `to` via Mailpit. */
+/** Waits for the newest `kind` link (verify-email | reset-password | invitations/accept) emailed to `to`. */
 export async function tokenFromInbox(request, to, kind) {
   const pattern = new RegExp(`/${kind}#token=([\\w-]{43})`);
   let token;

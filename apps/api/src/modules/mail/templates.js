@@ -1,13 +1,15 @@
 /**
  * Transactional email templates in French and Arabic.
- * Everything user-controlled (names) is HTML-escaped; subjects are fixed strings, so no header
- * injection is possible. Arabic emails are rendered right-to-left.
+ * Everything user-controlled (names) is HTML-escaped. Subjects are fixed strings, except the
+ * invitation subject, whose variables are stripped of control characters (no header injection;
+ * names are also validated without control characters). Arabic emails are rendered right-to-left.
+ * Any copy field may be a function of the template variables.
  */
 
 const COPY = {
   fr: {
     dir: 'ltr',
-    greeting: (name) => `Bonjour ${name},`,
+    greeting: (name) => (name ? `Bonjour ${name},` : 'Bonjour,'),
     footer: 'Tigmi — Votre maison, intelligemment organisée.',
     linkHint: 'Si le bouton ne fonctionne pas, copiez ce lien dans votre navigateur :',
     verifyEmail: {
@@ -34,10 +36,17 @@ const COPY = {
       action: 'Ce n’était pas moi : réinitialiser',
       note: 'Si vous êtes à l’origine de ce changement, aucune action n’est nécessaire.',
     },
+    invitation: {
+      subject: (v) => `${v.inviterName} vous invite à rejoindre « ${v.householdName} » sur Tigmi`,
+      body: (v) =>
+        `${v.inviterName} vous invite à rejoindre le foyer « ${v.householdName} » sur Tigmi en tant que ${v.role === 'ADMIN' ? 'administrateur' : 'membre'}. Tigmi vous aide à organiser ensemble budget, factures, courses et tâches. Cette invitation expire dans 7 jours.`,
+      action: 'Rejoindre le foyer',
+      note: 'Si vous ne connaissez pas cette personne, ignorez simplement cet e-mail.',
+    },
   },
   ar: {
     dir: 'rtl',
-    greeting: (name) => `مرحبًا ${name}،`,
+    greeting: (name) => (name ? `مرحبًا ${name}،` : 'مرحبًا،'),
     footer: 'Tigmi — منزلك، منظَّم بذكاء.',
     linkHint: 'إذا لم يعمل الزر، انسخ هذا الرابط في متصفحك:',
     verifyEmail: {
@@ -64,17 +73,37 @@ const COPY = {
       action: 'لم أكن أنا: إعادة التعيين',
       note: 'إذا قمت بهذا التغيير بنفسك، فلا حاجة لأي إجراء.',
     },
+    invitation: {
+      subject: (v) => `${v.inviterName} يدعوك للانضمام إلى «${v.householdName}» على Tigmi`,
+      body: (v) =>
+        `يدعوك ${v.inviterName} للانضمام إلى منزل «${v.householdName}» على Tigmi بصفة ${v.role === 'ADMIN' ? 'مسؤول' : 'عضو'}. يساعدكم Tigmi على تنظيم الميزانية والفواتير والمشتريات والمهام معًا. تنتهي صلاحية هذه الدعوة خلال 7 أيام.`,
+      action: 'الانضمام إلى المنزل',
+      note: 'إذا كنت لا تعرف هذا الشخص، فتجاهل هذه الرسالة ببساطة.',
+    },
   },
 };
 
 const HTML_ESCAPES = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
 export const escapeHtml = (value) => String(value).replace(/[&<>"']/g, (c) => HTML_ESCAPES[c]);
 
+// Control characters (CR, LF, NUL…) must never reach an email header.
+const stripControlChars = (value) => String(value).replace(/\p{Cc}+/gu, ' ');
+
 /** Builds { subject, text, html } for a template in the user's language (fallback: fr). */
-export function renderEmail(template, { language, name, actionUrl }) {
+export function renderEmail(template, { language, name, actionUrl, vars = {} }) {
   const copy = COPY[language] ?? COPY.fr;
-  const t = copy[template];
-  if (!t) throw new Error(`Unknown email template: ${template}`);
+  const raw = copy[template];
+  if (!raw) throw new Error(`Unknown email template: ${template}`);
+  const safeVars = Object.fromEntries(
+    Object.entries(vars).map(([key, value]) => [key, stripControlChars(value)]),
+  );
+  const resolve = (field) => (typeof field === 'function' ? field(safeVars) : field);
+  const t = {
+    subject: stripControlChars(resolve(raw.subject)),
+    body: resolve(raw.body),
+    action: resolve(raw.action),
+    note: resolve(raw.note),
+  };
 
   const text = [
     copy.greeting(name),

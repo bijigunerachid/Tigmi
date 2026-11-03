@@ -42,10 +42,11 @@ model User {
   createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt         DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  sessions    Session[]
-  auditLogs   AuditLog[]
-  userTokens  UserToken[]
-  memberships HouseholdMember[]
+  sessions        Session[]
+  auditLogs       AuditLog[]
+  userTokens      UserToken[]
+  memberships     HouseholdMember[]
+  invitationsSent Invitation[]      @relation("InvitationCreatedBy")
 
   @@map("users")
 }
@@ -97,7 +98,8 @@ model Household {
   createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  members HouseholdMember[]
+  members     HouseholdMember[]
+  invitations Invitation[]
 
   @@map("households")
 }
@@ -116,6 +118,30 @@ model HouseholdMember {
   @@unique([householdId, userId])
   @@index([userId])
   @@map("household_members")
+}
+
+/// An emailed invitation to join a household. Only the SHA-256 of the token is stored.
+/// Pending = not accepted, not revoked, not expired. At most one pending invitation per
+/// (household, email): re-inviting replaces the previous one.
+model Invitation {
+  id          String        @id @default(uuid(7)) @db.Uuid
+  householdId String        @map("household_id") @db.Uuid
+  /// Normalised (trimmed, lower-case) address the invitation was sent to.
+  email       String        @db.VarChar(254)
+  role        HouseholdRole
+  tokenHash   String        @unique @map("token_hash") @db.Char(64)
+  expiresAt   DateTime      @map("expires_at") @db.Timestamptz(3)
+  acceptedAt  DateTime?     @map("accepted_at") @db.Timestamptz(3)
+  revokedAt   DateTime?     @map("revoked_at") @db.Timestamptz(3)
+  /// Inviter; kept as null if their account is deleted so the history survives.
+  createdById String?       @map("created_by_id") @db.Uuid
+  createdAt   DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  household Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  createdBy User?     @relation("InvitationCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([householdId, email])
+  @@map("invitations")
 }
 
 /// Single-use links sent by email (verify address, reset password).

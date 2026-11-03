@@ -37,8 +37,12 @@ export const hasPermission = (role, permission) =>
  */
 export function canManageMember(actorRole, targetRole, newRole) {
   if (actorRole === 'OWNER') return true;
-  const actorRank = ROLE_RANK[actorRole] ?? 0;
-  if (ROLE_RANK[targetRole] >= actorRank) return false;
-  if (newRole !== undefined && ROLE_RANK[newRole] >= actorRank) return false;
-  return true;
+  if (!canAssignRole(actorRole, targetRole)) return false;
+  return newRole === undefined || canAssignRole(actorRole, newRole);
+}
+
+/** Owners may give any role; others only roles ranked strictly below their own. */
+export function canAssignRole(actorRole, role) {
+  if (actorRole === 'OWNER') return true;
+  return (ROLE_RANK[role] ?? Infinity) < (ROLE_RANK[actorRole] ?? 0);
 }

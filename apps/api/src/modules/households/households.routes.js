@@ -5,19 +5,18 @@ import {
   updateMemberRoleSchema,
 } from '@tigmi/validation';
 import { Router } from 'express';
-import { createHouseholdAccess } from '../../middleware/household-access.js';
 import { validateBody } from '../../middleware/validate.js';
 import { createHouseholdsController } from './households.controller.js';
 import { createHouseholdsService } from './households.service.js';
 import { createMembersService } from './members.service.js';
 import { PERMISSIONS as P } from './permissions.js';
 
-export function createHouseholdsRouter({ prisma, audit, authenticate }) {
+/** `can` = permission guard; `invitationsRouter` is mounted at /:householdId/invitations. */
+export function createHouseholdsRouter({ prisma, audit, authenticate, can, invitationsRouter }) {
   const controller = createHouseholdsController({
     householdsService: createHouseholdsService({ prisma, audit }),
     membersService: createMembersService({ prisma, audit }),
   });
-  const can = createHouseholdAccess({ prisma });
 
   const router = Router();
   router.use(authenticate);
@@ -48,6 +47,8 @@ export function createHouseholdsRouter({ prisma, audit, authenticate }) {
   );
   // Any member may remove themselves (leave); removing others is checked in the service.
   router.delete('/:householdId/members/:memberId', can(P.HOUSEHOLD_READ), controller.removeMember);
+
+  router.use('/:householdId/invitations', invitationsRouter);
 
   return router;
 }
