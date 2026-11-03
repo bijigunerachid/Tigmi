@@ -1,5 +1,5 @@
 import { CheckIcon } from '@heroicons/react/20/solid';
-import { useCallback, useEffect, useId, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { Button } from './Button.jsx';
 
 /**
@@ -22,6 +22,8 @@ export function Dropdown({
   fullWidth = false,
 }) {
   const [open, setOpen] = useState(false);
+  // Which item to focus once the menu is in the DOM ('first' | 'last' | null).
+  const focusOnOpen = useRef(null);
   const menuId = useId();
   const buttonRef = useRef(null);
   const containerRef = useRef(null);
@@ -31,10 +33,17 @@ export function Dropdown({
   const focusItem = useCallback((index) => itemRefs.current[index]?.focus(), []);
 
   const openAt = (position) => {
+    focusOnOpen.current = position;
     setOpen(true);
-    // Wait for the menu to render before moving focus into it.
-    requestAnimationFrame(() => focusItem(position === 'last' ? enabled.at(-1) : enabled[0]));
   };
+
+  // Move focus in the same commit that renders the menu (not a frame later), so keys typed
+  // right after opening always reach the menu instead of the button.
+  useLayoutEffect(() => {
+    if (!open || !focusOnOpen.current) return;
+    focusItem(focusOnOpen.current === 'last' ? enabled.at(-1) : enabled[0]);
+    focusOnOpen.current = null;
+  });
 
   const close = useCallback((returnFocus = true) => {
     setOpen(false);

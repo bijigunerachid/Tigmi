@@ -113,7 +113,8 @@ describe('Dropdown (menu button)', () => {
     const { trigger, onDelete } = setup();
     trigger.focus();
     await userEvent.keyboard('{ArrowDown}');
-    await screen.findByRole('menu');
+    // Focus must already be in the menu (no frame delay), or fast typing would hit the button.
+    expect(screen.getByRole('menuitem', { name: 'Modifier' })).toHaveFocus();
     await userEvent.keyboard('s{Enter}');
     expect(onDelete).toHaveBeenCalledTimes(1);
     expect(screen.queryByRole('menu')).not.toBeInTheDocument();
