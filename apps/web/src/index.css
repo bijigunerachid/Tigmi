@@ -29,6 +29,11 @@
   }
 }
 
+/* Headings receive focus after navigation (for screen readers); no ring for that case. */
+main h1:focus {
+  outline: none;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

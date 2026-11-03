@@ -35,6 +35,18 @@ export const DEFAULT_SECURITY_CONFIG = Object.freeze({
   },
 });
 
+/** Multiplies every rate limit (end-to-end tests only; production forces scale 1). */
+export function scaleRateLimits(config, scale = 1) {
+  if (scale === 1) return config;
+  const rateLimits = Object.fromEntries(
+    Object.entries(config.rateLimits).map(([name, rule]) => [
+      name,
+      { ...rule, limit: rule.limit * scale },
+    ]),
+  );
+  return Object.freeze({ ...config, rateLimits });
+}
+
 export function createSecurityConfig(overrides = {}) {
   return Object.freeze({
     ...DEFAULT_SECURITY_CONFIG,

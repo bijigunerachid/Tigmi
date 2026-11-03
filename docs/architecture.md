@@ -190,16 +190,57 @@ refresh ──► token found & unused ──► mark used (compare-and-swap) + 
 ## Web (`apps/web/src`)
 
 ```
-main.jsx           entry: providers + App
-app/               App shell and providers (TanStack Query)
-lib/api-client.js  fetch wrapper: /api/v1 prefix, cookies, ApiError { status, code, requestId }
-features/<name>/   feature folders (components, API calls, tests side by side)
-test/setup.js      Vitest + Testing Library setup
+main.jsx              entry: i18n + providers + App
+app/App.jsx           route tree (React Router 8): guest pages, emailed-link pages, signed-in pages
+app/providers.jsx     TanStack Query + AuthProvider
+lib/api-client.js     fetch wrapper + session: in-memory access token, single-flight refresh, retry
+lib/i18n.js           i18next (fr now, ar in Phase 3), errorMessage() / validationMessage()
+lib/forms.js          maps API VALIDATION_ERROR details onto react-hook-form fields
+lib/safe-redirect.js  ?next= only accepts in-app paths (no open redirect)
+hooks/useLinkToken.js reads #token= from emailed links, then removes it from the address bar
+components/ui/        Button, TextField/PasswordField, SelectField, Alert, Card, Spinner
+components/layout/    AuthLayout (centered card), AppLayout (top bar, sign out)
+features/auth/        AuthProvider, guards, login/register/check-email/verify/forgot/reset pages
+features/households/  households list + create, household page (members, invite, pending)
+features/invitations/ accept-invitation page (preview, sign in/up, accept)
+locales/fr/           translation.json (every string + every API/validation code)
+test/                 setup + render helpers (real routes in StrictMode, fake API)
 ```
 
-- Server state lives in **TanStack Query** (caching, retries, refetch). No global store needed yet.
-- Tailwind 4 tokens in `index.css` (`@theme`); full design system in Phase 3. UI strings are French
-  for now and move into i18next (fr/ar) in Phase 3.
+### Routes
+
+| Path                                                                        | Who                                         | Page                  |
+| --------------------------------------------------------------------------- | ------------------------------------------- | --------------------- |
+| `/login`, `/register`, `/check-email`, `/forgot-password`                   | signed out (signed-in users are redirected) | auth forms            |
+| `/verify-email#token`, `/reset-password#token`, `/invitations/accept#token` | anyone                                      | emailed links         |
+| `/`, `/households/:id`                                                      | signed in (others go to `/login?next=…`)    | households            |
+| `/status`                                                                   | anyone                                      | API / database status |
+
+### Session in the browser
+
+- The **access token** lives only in a module variable (never localStorage, never a readable
+  cookie); a reload loses it on purpose.
+- On page load, `AuthProvider` calls `refreshSession()`: `POST /auth/refresh` with the HttpOnly
+  cookie + `X-CSRF-Token` (read from the `tigmi_csrf` cookie). No CSRF cookie means no call.
+- `apiRequest()` adds `Authorization`; on `401 INVALID_ACCESS_TOKEN` it refreshes **once** and
+  retries. Concurrent callers share **one** refresh (single-flight) so the server never sees a
+  rotated token reused; `409 REFRESH_IN_PROGRESS` (another tab) is retried with back-off.
+  `SESSION_REVOKED` ends the session without refreshing.
+- Signing out clears the query cache and notifies other tabs (`BroadcastChannel`).
+- Pitfall found in this step: `x ??= (async () => { try {…} finally { x = null } })()` caches a
+  settled promise forever when the async body returns before its first `await`; use
+  `.finally()` on the promise instead (regression test in `lib/api-client.test.js`).
+
+### Forms, validation and text
+
+- Forms use **react-hook-form** with the **same Zod schemas as the API** (`@tigmi/validation`),
+  so rules match exactly; validation messages are codes translated by i18next.
+- Every user-facing string and every API error code has a French translation; Arabic + RTL is a
+  translation file and a switcher away (Phase 3). Components already use logical CSS properties
+  (`ms-/me-/ps-/pe-/start/end`) and `rtl:` variants for directional icons.
+- Server state lives in **TanStack Query**; client errors (4xx) are not retried, network/5xx are.
+- Accessibility: real labels, `aria-invalid`/`aria-describedby` on fields, `role="alert"` for
+  errors, focus moved to the page heading after navigation, skip link, 44px touch targets.
 
 ## Testing strategy
 

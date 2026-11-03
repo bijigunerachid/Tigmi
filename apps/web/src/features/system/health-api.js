@@ -6,7 +6,7 @@ import { apiRequest } from '../../lib/api-client.js';
  */
 export async function fetchHealth({ signal } = {}) {
   try {
-    return await apiRequest('/health', { signal });
+    return await apiRequest('/health', { signal, auth: false });
   } catch (error) {
     if (error.status === 503 && error.payload?.data) return error.payload.data;
     throw error;

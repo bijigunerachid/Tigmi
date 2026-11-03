@@ -42,3 +42,31 @@ export async function signUp(request, { fullName = 'E2E Famille', email = unique
   const { accessToken } = (await login.json()).data;
   return { email, headers: { Authorization: `Bearer ${accessToken}` } };
 }
+
+/** Runs an automatic WCAG 2 A/AA scan of the current page. */
+export async function expectAccessible(page) {
+  const { default: AxeBuilder } = await import('@axe-core/playwright');
+  const results = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa']).analyze();
+  expect(
+    results.violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.target).join(' | ')}`),
+  ).toEqual([]);
+}
+
+/** Fails if the page scrolls sideways (the most common phone layout bug). */
+export async function expectNoHorizontalOverflow(page) {
+  const overflow = await page.evaluate(
+    () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+  );
+  expect(overflow).toBe(0);
+}
+
+/** Saves a full-page screenshot next to the test results, named per viewport. */
+export async function snap(page, testInfo, name) {
+  await page.screenshot({
+    path: testInfo.outputPath(`${name}-${testInfo.project.name}.png`),
+    fullPage: true,
+  });
+}
+
+/** Turns an emailed link token into a path on the app under test. */
+export const linkPath = (kind, token) => `/${kind}#token=${token}`;

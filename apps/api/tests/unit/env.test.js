@@ -81,6 +81,12 @@ describe('loadEnv', () => {
       );
     });
 
+    it('refuses relaxed rate limits', () => {
+      expect(() => loadEnv({ ...production, RATE_LIMIT_SCALE: '100' })).toThrow(
+        /RATE_LIMIT_SCALE: must be 1 in production/,
+      );
+    });
+
     it('refuses insecure cookies', () => {
       expect(() => loadEnv({ ...production, COOKIE_SECURE: 'false' })).toThrow(
         /COOKIE_SECURE: must be true in production/,
